@@ -1175,22 +1175,32 @@ async function deleteLoc(locName) {
 }
 
 // Trier une liste d'oiseaux selon le critère choisi
-function sortBirds(birds, sortBy) {
-  const rarityOrder = { rare: 0, uncommon: 1, common: 2 };
+function sortBirds(birds, sortBy, location = null) {
+  const rarityVal = r => ({ rare: 0, uncommon: 1, common: 2 })[r] ?? 2;
   const copy = [...birds];
-  if (sortBy === "alpha")   return copy.sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  if (sortBy === "rarity")  return copy.sort((a, b) => (rarityOrder[a.rarity||"common"]||2) - (rarityOrder[b.rarity||"common"]||2));
-  return copy.sort((a, b) => new Date(b.date) - new Date(a.date)); // date par défaut
+  if (sortBy === "alpha")  return copy.sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  if (sortBy === "rarity") return copy.sort((a, b) => rarityVal(a.rarity) - rarityVal(b.rarity));
+  if (sortBy === "freq" && location) {
+    const { stats } = getFrequencyStats(location);
+    return copy.sort((a, b) => {
+      const pa = stats[a.name]?.pct ?? -1;
+      const pb = stats[b.name]?.pct ?? -1;
+      return pb - pa; // plus haut % en premier
+    });
+  }
+  return copy.sort((a, b) => new Date(b.date) - new Date(a.date));
 }
 
-function renderSortBar(containerId, currentSort, onSort) {
+function renderSortBar(containerId, currentSort, onSort, showFreq = false) {
   const bar = document.getElementById(containerId);
   if (!bar) return;
   bar.innerHTML = "";
   const row = document.createElement("div");
   row.className = "sort-row";
   row.innerHTML = '<span class="sort-label">Trier :</span>';
-  [["date","📅 Date"],["alpha","🔤 A→Z"],["rarity","⭐ Rareté"]].forEach(([key, label]) => {
+  const btns = [["date","📅 Date"],["alpha","🔤 A→Z"],["rarity","⭐ Rareté"]];
+  if (showFreq) btns.push(["freq","📊 Présence"]);
+  btns.forEach(([key, label]) => {
     const btn = document.createElement("button");
     btn.className = "sort-btn" + (currentSort === key ? " active" : "");
     btn.textContent = label;
@@ -1264,7 +1274,7 @@ function renderLocationsTab() {
   scroll.appendChild(addChip);
 
   const rawBirds = getSharedBirds(currentLocation);
-  const birds    = sortBirds(rawBirds, currentLocSort);
+  const birds    = sortBirds(rawBirds, currentLocSort, currentLocation);
   const list     = document.getElementById("birdList");
   const empty    = document.getElementById("emptyState");
   const title   = document.getElementById("currentLocationTitle");
@@ -1314,7 +1324,7 @@ function renderLocationsTab() {
   list.innerHTML      = "";
 
   // Barre de tri
-  renderSortBar("locSortBar", currentLocSort, (key) => { currentLocSort = key; renderLocationsTab(); });
+  renderSortBar("locSortBar", currentLocSort, (key) => { currentLocSort = key; renderLocationsTab(); }, true);
 
   if (birds.length === 0) {
     empty.classList.add("show");
@@ -1844,27 +1854,32 @@ async function fetchWikipediaInfo(frenchName) {
 // ========== XENO-CANTO (sons d'oiseaux) ==========
 const xenoCache = {};
 
-async function fetchXenoCanto(frenchName) {
-  if (xenoCache[frenchName]) return xenoCache[frenchName];
+async function fetchXenoCanto(frenchName, sciName = null) {
+  const cacheKey = frenchName;
+  if (xenoCache[cacheKey]) return xenoCache[cacheKey];
   try {
-    // Utiliser le worker comme proxy pour éviter les CORS
-    const workerUrl = typeof WORKER_URL !== "undefined" ? WORKER_URL : null;
+    // Xeno-canto fonctionne mieux avec le nom scientifique latin
+    // On essaie d'abord avec le nom sci, puis fallback nom français
+    const query = sciName
+      ? sciName.replace(/ /g, "+")
+      : encodeURIComponent(frenchName);
 
-    // Xeno-canto API v2 — chercher chant ET cri séparément
-    const encodedName = encodeURIComponent(frenchName);
-    const url = `https://xeno-canto.org/api/2/recordings?query=${encodedName}+q:A&page=1`;
-
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error("xeno-canto error");
+    // L'API xeno-canto supporte CORS nativement — pas besoin de proxy
+    const url = `https://xeno-canto.org/api/2/recordings?query=${query}&page=1`;
+    const resp = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (!resp.ok) throw new Error(`xeno-canto ${resp.status}`);
     const data = await resp.json();
 
-    const recordings = (data.recordings || []).slice(0, 6);
+    const recordings = (data.recordings || []).slice(0, 8);
+    const songs = recordings.filter(r => r.type && /song|chant/i.test(r.type)).slice(0, 2);
+    const calls = recordings.filter(r => r.type && /call|cri|alarm/i.test(r.type)).slice(0, 2);
+
     const result = {
-      songs: recordings.filter(r => r.type && r.type.toLowerCase().includes("song")).slice(0, 2),
-      calls: recordings.filter(r => r.type && r.type.toLowerCase().includes("call")).slice(0, 2),
-      all:   recordings.slice(0, 3)
+      songs,
+      calls,
+      all: recordings.slice(0, 3)
     };
-    xenoCache[frenchName] = result;
+    xenoCache[cacheKey] = result;
     return result;
   } catch(e) {
     console.warn("fetchXenoCanto failed:", e);
@@ -1923,11 +1938,10 @@ function openBirdSheet(birdName, birdObservations) {
   document.body.style.overflow = "hidden";
 
   // Charger les infos Wikipedia en arrière-plan
-  // Charger Wikipedia + sons Xeno-canto en parallèle
-  Promise.all([
-    fetchWikipediaInfo(birdName),
-    fetchXenoCanto(birdName)
-  ]).then(([info, sounds]) => {
+  // Charger Wikipedia d'abord pour avoir le nom scientifique, puis Xeno-canto
+  fetchWikipediaInfo(birdName).then(async info => {
+    const sciName = info?.sciName || null;
+    const sounds  = await fetchXenoCanto(birdName, sciName);
     renderBirdSheet(birdName, birdObservations, info, knownImage, sounds);
   });
 }

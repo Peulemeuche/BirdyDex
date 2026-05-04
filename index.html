@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <title>BirdrDex 🕊️</title>
+  <title>BirdyDex 🕊️</title>
   <!-- Preload fonts to prevent FOUC -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -34,7 +34,7 @@
 
     <div class="onboarding-logo">
       <span class="onboarding-bird">🕊️</span>
-      <h1 class="onboarding-title">BirdrDex</h1>
+      <h1 class="onboarding-title">BirdyDex</h1>
       <p class="onboarding-sub">Votre carnet d'observation en famille</p>
     </div>
 
@@ -98,7 +98,7 @@
     <div class="profile-content">
       <div class="app-logo">
         <span class="logo-icon">🕊️</span>
-        <h1 class="logo-title">BirdrDex</h1>
+        <h1 class="logo-title">BirdyDex</h1>
         <p class="logo-sub">Votre carnet d'observation</p>
       </div>
       <div class="profiles-list" id="profilesList"></div>
@@ -133,7 +133,7 @@
       </button>
       <button class="tabnav-btn" data-tab="birddex">
         <span class="tabnav-icon">🕊️</span>
-        <span>BirdrDex</span>
+        <span>BirdyDex</span>
       </button>
       <button class="tabnav-btn tab-center" data-tab="scan">
         <span class="tabnav-icon">＋</span>
@@ -156,7 +156,8 @@
           <h2 id="currentLocationTitle">Choisir un lieu</h2>
           <span class="location-count" id="locationBirdCount"></span>
         </div>
-        <ul class="bird-cards" id="birdList"></ul>
+        <div id="locSortBar"></div>
+      <ul class="bird-cards" id="birdList"></ul>
         <div class="empty-state" id="emptyState">
           <span>🌿</span>
           <p>Aucun oiseau observé ici encore.<br>Ajoutez un screenshot Merlin !</p>
@@ -167,7 +168,7 @@
     <!-- TAB: BIRDDEX -->
     <div class="tab-content" id="tab-birddex">
       <div class="birddex-header">
-        <h2>Mon BirdrDex</h2>
+        <h2>Mon BirdyDex</h2>
         <div class="birddex-progress">
           <span id="birddexCount">0 espèces</span>
           <div class="progress-bar"><div class="progress-fill" id="birddexFill"></div></div>
@@ -176,6 +177,7 @@
       <div class="birddex-search">
         <input type="text" id="birddexSearch" placeholder="🔍 Rechercher un oiseau...">
       </div>
+      <div id="dexSortBar"></div>
       <ul class="birddex-list" id="birddexList"></ul>
     </div>
 

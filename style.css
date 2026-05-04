@@ -2226,3 +2226,42 @@ body {
   opacity: 1;
   background: rgba(192,67,42,0.08);
 }
+
+/* ========== SORT BAR ========== */
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 4px;
+  flex-wrap: wrap;
+}
+.sort-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-right: 2px;
+}
+.sort-btn {
+  background: white;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--charcoal);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.sort-btn:hover {
+  border-color: var(--sage);
+  color: var(--forest);
+}
+.sort-btn.active {
+  background: var(--forest);
+  border-color: var(--forest);
+  color: white;
+  font-weight: 600;
+}

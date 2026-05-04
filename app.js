@@ -22,6 +22,8 @@ const FIREBASE_CONFIG = {
 // ========== STATE ==========
 let currentProfileId = null;
 let currentLocation  = DEFAULT_LOCATIONS[0];
+let currentLocSort   = "date";   // "date" | "alpha" | "rarity"
+let currentDexSort   = "date";   // "date" | "alpha" | "rarity" 
 let selectedAvatar   = AVATARS[0];
 let firebaseDb       = null;
 let groupCode        = null;
@@ -221,6 +223,13 @@ function startRealtimeSync() {
     if (currentProfileId) renderLocationsTab();
   });
 
+  // Sync sessions de scan en temps réel → stats de fréquence partagées
+  firebaseDb.ref(`groups/${groupCode}/sessions`).on("value", () => {
+    pullSessionsFromFirebase().then(() => {
+      if (currentProfileId) renderLocationsTab();
+    });
+  });
+
   // Sync lieux du groupe en temps réel → tout le monde voit les nouveaux lieux
   firebaseDb.ref(`groups/${groupCode}/locations`).on("value", snap => {
     const data = snap.val();
@@ -275,8 +284,8 @@ function getStoredGroupCode() { return localStorage.getItem("birdrGroupCode") ||
 function storeGroupCode(code) { localStorage.setItem("birdrGroupCode", code); groupCode = code; }
 
 // Mémoriser / récupérer le dernier profil utilisé sur cet appareil
-function getLastProfileId() { return localStorage.getItem("birdrLastProfile") || null; }
-function storeLastProfileId(id) { localStorage.setItem("birdrLastProfile", id); }
+function getLastProfileId() { return localStorage.getItem("birdyLastProfile") || null; }
+function storeLastProfileId(id) { localStorage.setItem("birdyLastProfile", id); }
 
 function showOnboarding() {
   document.getElementById("onboardingScreen").classList.add("active");
@@ -351,8 +360,8 @@ async function handleOnboardingSubmit() {
 }
 
 // ========== DB LOCALE ==========
-function getDB() { return JSON.parse(localStorage.getItem("birdrDexDB") || '{"profiles":{},"sharedBirds":{}}'); }
-function saveDB(db) { localStorage.setItem("birdrDexDB", JSON.stringify(db)); }
+function getDB() { return JSON.parse(localStorage.getItem("birdyDexDB") || '{"profiles":{},"sharedBirds":{}}'); }
+function saveDB(db) { localStorage.setItem("birdyDexDB", JSON.stringify(db)); }
 function getProfile(id) { return getDB().profiles[id] || null; }
 function saveProfile(p) {
   p.updatedAt = new Date().toISOString();
@@ -719,6 +728,99 @@ document.getElementById("analyzeBtn").addEventListener("click", async () => {
 });
 }); // end DOMContentLoaded analyzeBtn
 
+
+// ========== SESSIONS DE SCAN (fréquence des oiseaux par lieu) ==========
+// Stocké dans Firebase (données partagées du groupe) + cache local
+
+// Lire les sessions depuis le cache local (rempli par le listener Firebase)
+function getLocSessions(location) {
+  const db = getDB();
+  return (db.locSessions || {})[location] || [];
+}
+
+// Enregistrer une session dans Firebase ET en local
+async function recordScanSession(location, birdNames) {
+  if (!birdNames || birdNames.length === 0) return;
+  const session = { date: new Date().toISOString(), birds: birdNames };
+
+  // Local (cache)
+  const db = getDB();
+  if (!db.locSessions) db.locSessions = {};
+  if (!db.locSessions[location]) db.locSessions[location] = [];
+  db.locSessions[location].push(session);
+  saveDB(db);
+
+  // Firebase (partagé avec tout le groupe)
+  if (firebaseDb && groupCode) {
+    try {
+      await firebaseDb.ref(`groups/${groupCode}/sessions/${locationKey(location)}`).push(session);
+    } catch(e) { console.warn("recordScanSession Firebase error:", e); }
+  }
+}
+
+// Sync les sessions Firebase → local (appelé au démarrage et par le listener)
+async function pullSessionsFromFirebase() {
+  if (!firebaseDb || !groupCode) return;
+  try {
+    const snap = await firebaseDb.ref(`groups/${groupCode}/sessions`).once("value");
+    const data = snap.val();
+    const db = getDB();
+    db.locSessions = {};
+    if (data) {
+      Object.entries(data).forEach(([locKey, sessionsObj]) => {
+        // Retrouver le vrai nom du lieu depuis sharedBirds ou groupLocs
+        const locName = Object.values(db.sharedBirds || {})
+          .flatMap(b => b)
+          .find(b => locationKey(b.location || "") === locKey)?.location
+          || (db.groupLocs || []).find(l => locationKey(l) === locKey)
+          || locKey;
+        db.locSessions[locName] = Object.values(sessionsObj);
+      });
+    }
+    saveDB(db);
+  } catch(e) { console.warn("pullSessionsFromFirebase error:", e); }
+}
+
+// Calcule les stats de fréquence pour un lieu
+function getFrequencyStats(location) {
+  const sessions = getLocSessions(location);
+  if (sessions.length === 0) return { total: 0, stats: {} };
+  const total = sessions.length;
+  const counts = {};
+  sessions.forEach(s => {
+    (s.birds || []).forEach(name => {
+      counts[name] = (counts[name] || 0) + 1;
+    });
+  });
+  const stats = {};
+  Object.entries(counts).forEach(([name, count]) => {
+    const pct = Math.round((count / total) * 100);
+    // NC si 1 seule session au total (pas assez de données pour être significatif)
+    const label = total === 1 ? "NC" : pct + "%";
+    stats[name] = { count, total, pct, label };
+  });
+  return { total, stats };
+}
+
+// Badge de fréquence HTML
+function freqBadgeHTML(birdName, location) {
+  const { total, stats } = getFrequencyStats(location);
+  if (total === 0) return "";
+  const s = stats[birdName];
+  if (!s) return "";
+  // NC = pas assez de données
+  if (s.label === "NC") {
+    return `<span class="freq-badge" style="color:#aaa;background:rgba(0,0,0,0.04)">NC</span>`;
+  }
+  const color = s.pct >= 80 ? "#2d5a27"
+              : s.pct >= 40 ? "#7a5c0f"
+              : "#888";
+  const bg    = s.pct >= 80 ? "rgba(45,90,39,0.1)"
+              : s.pct >= 40 ? "rgba(212,134,42,0.1)"
+              : "rgba(0,0,0,0.05)";
+  return `<span class="freq-badge" style="color:${color};background:${bg}">${s.label}</span>`;
+}
+
 // ========== AJOUTER DES OISEAUX ==========
 async function addBirdsToProfile(names, images, location, targetProfileId = null) {
   const profileId = targetProfileId || currentProfileId;
@@ -736,10 +838,14 @@ async function addBirdsToProfile(names, images, location, targetProfileId = null
   // XP par rareté
   const XP_BY_RARITY = { common: 25, uncommon: 50, rare: 100 };
 
+  const sessionBirdNames = []; // tous les oiseaux de ce scan (nouveaux + existants)
+
   names.forEach((birdObj, i) => {
     const name   = typeof birdObj === "string" ? birdObj : birdObj.name;
     const rarity = (typeof birdObj === "object" && birdObj.rarity) ? birdObj.rarity : "common";
     const bird   = { name, image: images[i], date: new Date().toISOString(), location, addedBy: p.name, rarity };
+
+    sessionBirdNames.push(name); // toujours compter, même si déjà présent
 
     // Ajout dans la liste partagée (locale + Firebase) si pas déjà présent
     if (!sharedExistingNames.includes(name)) {
@@ -759,6 +865,9 @@ async function addBirdsToProfile(names, images, location, targetProfileId = null
 
   if (!p.myLocs.includes(location)) p.myLocs.push(location);
   saveSharedBirds(location, sharedBirds);
+
+  // Enregistrer la session de scan pour les stats de fréquence (Firebase + local)
+  await recordScanSession(location, sessionBirdNames);
 
   // Envoi Firebase en parallèle
   await Promise.all(firebasePushes);
@@ -794,7 +903,7 @@ function haptic(type = "light") {
 function promptDevReset() {
   const code = prompt("Code développeur requis :");
   if (code === null) return;
-  if (code !== "BIRDR2024") { alert("Code incorrect."); return; }
+  if (code !== "BIRDY2024") { alert("Code incorrect."); return; }
   resetAllData();
 }
 
@@ -936,7 +1045,7 @@ function openProfile(id) {
 
 // ========== FAVORIS DE LIEUX ==========
 function getFavLocs() {
-  return JSON.parse(localStorage.getItem("birdrFavLocs") || "[]");
+  return JSON.parse(localStorage.getItem("birdyFavLocs") || "[]");
 }
 function toggleFavLoc(locName) {
   let favs = getFavLocs();
@@ -945,7 +1054,7 @@ function toggleFavLoc(locName) {
   } else {
     favs.push(locName);
   }
-  localStorage.setItem("birdrFavLocs", JSON.stringify(favs));
+  localStorage.setItem("birdyFavLocs", JSON.stringify(favs));
 }
 function isFavLoc(locName) {
   return getFavLocs().includes(locName);
@@ -992,7 +1101,7 @@ async function renameLoc(oldName, newName) {
   // 4. Favoris
   const favs = getFavLocs();
   const fi = favs.indexOf(oldName);
-  if (fi !== -1) { favs[fi] = newName; localStorage.setItem("birdrFavLocs", JSON.stringify(favs)); }
+  if (fi !== -1) { favs[fi] = newName; localStorage.setItem("birdyFavLocs", JSON.stringify(favs)); }
 
   // 5. Firebase : tout en UN SEUL update atomique
   if (firebaseDb && groupCode) {
@@ -1042,7 +1151,7 @@ async function deleteLoc(locName) {
 
   // Favoris
   const favs = getFavLocs().filter(f => f !== locName);
-  localStorage.setItem("birdrFavLocs", JSON.stringify(favs));
+  localStorage.setItem("birdyFavLocs", JSON.stringify(favs));
 
   // Firebase : supprimer lieu + oiseaux en une seule passe
   if (firebaseDb && groupCode) {
@@ -1063,6 +1172,32 @@ async function deleteLoc(locName) {
   currentLocation = remaining[0] || DEFAULT_LOCATIONS[0];
   renderLocationsTab();
   renderLocationSelect();
+}
+
+// Trier une liste d'oiseaux selon le critère choisi
+function sortBirds(birds, sortBy) {
+  const rarityOrder = { rare: 0, uncommon: 1, common: 2 };
+  const copy = [...birds];
+  if (sortBy === "alpha")   return copy.sort((a, b) => a.name.localeCompare(b.name, "fr"));
+  if (sortBy === "rarity")  return copy.sort((a, b) => (rarityOrder[a.rarity||"common"]||2) - (rarityOrder[b.rarity||"common"]||2));
+  return copy.sort((a, b) => new Date(b.date) - new Date(a.date)); // date par défaut
+}
+
+function renderSortBar(containerId, currentSort, onSort) {
+  const bar = document.getElementById(containerId);
+  if (!bar) return;
+  bar.innerHTML = "";
+  const row = document.createElement("div");
+  row.className = "sort-row";
+  row.innerHTML = '<span class="sort-label">Trier :</span>';
+  [["date","📅 Date"],["alpha","🔤 A→Z"],["rarity","⭐ Rareté"]].forEach(([key, label]) => {
+    const btn = document.createElement("button");
+    btn.className = "sort-btn" + (currentSort === key ? " active" : "");
+    btn.textContent = label;
+    btn.onclick = () => onSort(key);
+    row.appendChild(btn);
+  });
+  bar.appendChild(row);
 }
 // ========== ONGLET LIEUX ==========
 function renderLocationsTab() {
@@ -1128,9 +1263,10 @@ function renderLocationsTab() {
   };
   scroll.appendChild(addChip);
 
-  const birds   = getSharedBirds(currentLocation);
-  const list    = document.getElementById("birdList");
-  const empty   = document.getElementById("emptyState");
+  const rawBirds = getSharedBirds(currentLocation);
+  const birds    = sortBirds(rawBirds, currentLocSort);
+  const list     = document.getElementById("birdList");
+  const empty    = document.getElementById("emptyState");
   const title   = document.getElementById("currentLocationTitle");
   const countEl = document.getElementById("locationBirdCount");
 
@@ -1177,6 +1313,9 @@ function renderLocationsTab() {
   countEl.textContent = birds.length + " oiseau" + (birds.length > 1 ? "x" : "");
   list.innerHTML      = "";
 
+  // Barre de tri
+  renderSortBar("locSortBar", currentLocSort, (key) => { currentLocSort = key; renderLocationsTab(); });
+
   if (birds.length === 0) {
     empty.classList.add("show");
     countEl.textContent = "";
@@ -1191,11 +1330,13 @@ function renderLocationsTab() {
       if (r !== "common") li.classList.add(r);
       const rarityDot = r === "rare" ? `<span class="rarity-dot rare" title="Rare"></span>` :
                         r === "uncommon" ? `<span class="rarity-dot uncommon" title="Peu commun"></span>` : "";
+      const freqBadge = freqBadgeHTML(bird.name, currentLocation);
       li.innerHTML  = `
         <img src="${bird.image}" alt="${bird.name}" style="object-fit:cover;object-position:center top;">
         <div class="bird-card-info">
           <div class="bird-card-name">${bird.name}${rarityDot}</div>
           <div class="bird-card-meta">Observé le ${dateStr}${bird.addedBy ? " par " + bird.addedBy : ""}</div>
+          ${freqBadge}
         </div>
         ${r === "rare" ? `<span class="rarity-badge rare">⭐ Rare</span>` :
           r === "uncommon" ? `<span class="rarity-badge uncommon">◑ Peu commun</span>` :
@@ -1248,9 +1389,10 @@ function renderLocationSelect() {
 
 // ========== ONGLET BIRDDEX ==========
 function renderBirddex(query = "") {
-  const p        = getProfile(currentProfileId);
-  const all      = uniqueMyBirds(p);
-  const filtered = query ? all.filter(b => b.name.toLowerCase().includes(query.toLowerCase())) : all;
+  const p          = getProfile(currentProfileId);
+  const all        = uniqueMyBirds(p);
+  const filtered_q = query ? all.filter(b => b.name.toLowerCase().includes(query.toLowerCase())) : all;
+  const filtered   = sortBirds(filtered_q, currentDexSort);
 
   const rareCount     = all.filter(b => b.rarity === "rare").length;
   const uncommonCount = all.filter(b => b.rarity === "uncommon").length;
@@ -1268,6 +1410,10 @@ function renderBirddex(query = "") {
 
   const list = document.getElementById("birddexList");
   list.innerHTML = "";
+
+  // Barre de tri
+  renderSortBar("dexSortBar", currentDexSort, (key) => { currentDexSort = key; renderBirddex(query); });
+
   filtered.forEach(bird => {
     const li = document.createElement("li");
     const dr = bird.rarity || "common";
@@ -1417,9 +1563,9 @@ function renderProfileTab() {
         <div class="stat-tile-label">Lieux</div>
       </div>
       <div class="stat-tile">
-        <div class="stat-tile-icon">⚡</div>
-        <div class="stat-tile-value">${p.xp || 0}</div>
-        <div class="stat-tile-label">XP Total</div>
+        <div class="stat-tile-icon">🏅</div>
+        <div class="stat-tile-value">${BADGES.filter(b => b.req(p)).length}/${BADGES.length}</div>
+        <div class="stat-tile-label">Badges</div>
       </div>
     </div>
     <div class="rarity-scale-section">
@@ -1517,8 +1663,8 @@ async function confirmDeleteProfile() {
   }
 
   // 3. Effacer le lastProfile mémorisé si c'était lui
-  if (localStorage.getItem("birdrLastProfile") === idToDelete) {
-    localStorage.removeItem("birdrLastProfile");
+  if (localStorage.getItem("birdyLastProfile") === idToDelete) {
+    localStorage.removeItem("birdyLastProfile");
   }
 
   currentProfileId = null;
@@ -1694,6 +1840,71 @@ async function fetchWikipediaInfo(frenchName) {
   }
 }
 
+
+// ========== XENO-CANTO (sons d'oiseaux) ==========
+const xenoCache = {};
+
+async function fetchXenoCanto(frenchName) {
+  if (xenoCache[frenchName]) return xenoCache[frenchName];
+  try {
+    // Utiliser le worker comme proxy pour éviter les CORS
+    const workerUrl = typeof WORKER_URL !== "undefined" ? WORKER_URL : null;
+
+    // Xeno-canto API v2 — chercher chant ET cri séparément
+    const encodedName = encodeURIComponent(frenchName);
+    const url = `https://xeno-canto.org/api/2/recordings?query=${encodedName}+q:A&page=1`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("xeno-canto error");
+    const data = await resp.json();
+
+    const recordings = (data.recordings || []).slice(0, 6);
+    const result = {
+      songs: recordings.filter(r => r.type && r.type.toLowerCase().includes("song")).slice(0, 2),
+      calls: recordings.filter(r => r.type && r.type.toLowerCase().includes("call")).slice(0, 2),
+      all:   recordings.slice(0, 3)
+    };
+    xenoCache[frenchName] = result;
+    return result;
+  } catch(e) {
+    console.warn("fetchXenoCanto failed:", e);
+    return null;
+  }
+}
+
+function renderSoundsSection(sounds) {
+  if (!sounds) return "";
+  const tracks = [
+    ...sounds.songs.map(r => ({ ...r, typeLabel: "🎵 Chant" })),
+    ...sounds.calls.map(r => ({ ...r, typeLabel: "📢 Cri" }))
+  ];
+  // Si pas de songs/calls séparés, utiliser all
+  const finalTracks = tracks.length > 0 ? tracks : sounds.all.map(r => ({ ...r, typeLabel: "🔊 Son" }));
+  if (finalTracks.length === 0) return "";
+
+  const items = finalTracks.map(r => `
+    <div class="sound-item">
+      <div class="sound-type-badge">${r.typeLabel}</div>
+      <div class="sound-info">
+        <div class="sound-place">📍 ${r.loc || "Lieu inconnu"}</div>
+        <div class="sound-by">par ${r.rec || "?"}</div>
+      </div>
+      <audio class="sound-player" controls preload="none" src="https:${r.file}">
+        <source src="https:${r.file}" type="audio/mpeg">
+      </audio>
+    </div>
+  `).join("");
+
+  return `
+    <div class="bird-sheet-section">
+      <div class="bird-sheet-section-title">🎧 Chants & Cris</div>
+      <div class="sound-list">${items}</div>
+      <a href="https://xeno-canto.org/explore?query=${encodeURIComponent(finalTracks[0]?.sp || '')}"
+         target="_blank" rel="noopener"
+         class="sound-more-link">Écouter plus sur Xeno-canto →</a>
+    </div>
+  `;
+}
 function openBirdSheet(birdName, birdObservations) {
   const overlay = document.getElementById("birdSheetOverlay");
   const heroImg = document.getElementById("birdSheetHeroImg");
@@ -1712,13 +1923,17 @@ function openBirdSheet(birdName, birdObservations) {
   document.body.style.overflow = "hidden";
 
   // Charger les infos Wikipedia en arrière-plan
-  fetchWikipediaInfo(birdName).then(info => {
-    renderBirdSheet(birdName, birdObservations, info, knownImage);
+  // Charger Wikipedia + sons Xeno-canto en parallèle
+  Promise.all([
+    fetchWikipediaInfo(birdName),
+    fetchXenoCanto(birdName)
+  ]).then(([info, sounds]) => {
+    renderBirdSheet(birdName, birdObservations, info, knownImage, sounds);
   });
 }
 window.openBirdSheet = openBirdSheet;
 
-function renderBirdSheet(birdName, observations, info, knownImage) {
+function renderBirdSheet(birdName, observations, info, knownImage, sounds = null) {
   const heroImg = document.getElementById("birdSheetHeroImg");
   const gallery = document.getElementById("birdSheetGallery");
   const body    = document.getElementById("birdSheetBody");
@@ -1807,6 +2022,8 @@ function renderBirdSheet(birdName, observations, info, knownImage) {
       <div class="bird-sheet-my-obs">${myObs || "<div style='color:var(--muted);font-size:13px;padding:8px 0;'>Aucune observation enregistrée</div>"}</div>
     </div>
 
+    ${renderSoundsSection(sounds)}
+
     ${info?.wikiUrl ? `
     <a href="${info.wikiUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;color:var(--forest);font-size:13px;font-weight:600;padding:14px;background:white;border-radius:14px;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
       🔗 Voir la fiche complète sur Wikipedia
@@ -1868,6 +2085,7 @@ document.getElementById("birdSheetOverlay").addEventListener("click", e => {
 
   startRealtimeSync();
   await pullLocationsFromFirebase(); // pull custom locations before rendering
+  await pullSessionsFromFirebase();  // pull scan sessions (fréquences partagées)
   const profiles = getAllProfiles();
   
   

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>BirdrDex 🕊️</title>
+  <!-- Preload fonts to prevent FOUC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <!-- Critical inline CSS - prevents flash of unstyled content -->
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: #2d5a27;
+      font-family: Georgia, 'Times New Roman', serif; /* fallback until DM Sans loads */
+    }
+    body { opacity: 0; transition: opacity 0.3s ease; }
+    body.ready { opacity: 1; }
+    .screen { position: fixed; inset: 0; display: none; }
+    #onboardingScreen { display: none; position: fixed; inset: 0; z-index: 200; background: #1a3a16; }
+  </style>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== ÉCRAN ACCUEIL (nouveau profil - 1ère connexion) ===== -->
+<div id="onboardingScreen">
+  <div class="onboarding-bg">
+    <div class="onboarding-leaves"></div>
+  </div>
+  <div class="onboarding-inner">
+
+    <div class="onboarding-logo">
+      <span class="onboarding-bird">🕊️</span>
+      <h1 class="onboarding-title">BirdrDex</h1>
+      <p class="onboarding-sub">Votre carnet d'observation en famille</p>
+    </div>
+
+    <div class="onboarding-card">
+      <div class="onboarding-step-label">Créer votre profil</div>
+
+      <!-- Prénom -->
+      <div class="ob-field">
+        <label class="ob-label">Votre prénom</label>
+        <input
+          id="obNameInput"
+          type="text"
+          class="ob-input"
+          placeholder="Ex : Sophie"
+          maxlength="20"
+          autocomplete="off"
+        />
+      </div>
+
+      <!-- Avatar -->
+      <div class="ob-field">
+        <label class="ob-label">Choisissez votre avatar</label>
+        <div class="ob-avatar-picker" id="obAvatarPicker"></div>
+      </div>
+
+      <!-- Code groupe (fixe FAMILLE, juste à rentrer) -->
+      <div class="ob-field">
+        <label class="ob-label">Code du groupe famille</label>
+        <div class="ob-group-row">
+          <span class="ob-group-icon">🏡</span>
+          <input
+            id="obGroupInput"
+            type="text"
+            class="ob-group-input"
+            placeholder="Code famille"
+            maxlength="20"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+        </div>
+        <p class="ob-hint">Demande le code secret à un membre de ta famille 🏡</p>
+        <p id="obGroupError" class="ob-error"></p>
+      </div>
+
+      <button id="obJoinBtn" class="ob-btn">
+        <span>Rejoindre le groupe</span>
+        <span class="ob-btn-arrow">→</span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+
+  <!-- PROFILE SELECTOR SCREEN (utilisateurs déjà connectés) -->
+  <div id="profileScreen" class="screen">
+    <div class="profile-bg">
+      <div class="leaves-bg"></div>
+    </div>
+    <div class="profile-content">
+      <div class="app-logo">
+        <span class="logo-icon">🕊️</span>
+        <h1 class="logo-title">BirdrDex</h1>
+        <p class="logo-sub">Votre carnet d'observation</p>
+      </div>
+      <div class="profiles-list" id="profilesList"></div>
+
+      <button class="btn-add-profile" id="addProfileBtn">
+        <span>＋</span> Nouveau profil
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN APP SCREEN -->
+  <div id="appScreen" class="screen">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-info">
+        <span class="topbar-name" id="topbarName"></span>
+        <span class="topbar-xp" id="topbarXp"></span>
+      </div>
+      <div class="topbar-group-badge" id="topbarGroupBadge"></div>
+      <div class="topbar-avatar-wrap">
+        <button class="topbar-avatar" id="topbarAvatar" title="Changer de profil"></button>
+        <span class="notif-badge" id="notifBadge"></span>
+      </div>
+    </header>
+
+    <!-- TAB NAV -->
+    <nav class="tabnav">
+      <button class="tabnav-btn active" data-tab="locations">
+        <span class="tabnav-icon">📍</span>
+        <span>Lieux</span>
+      </button>
+      <button class="tabnav-btn" data-tab="birddex">
+        <span class="tabnav-icon">🕊️</span>
+        <span>BirdrDex</span>
+      </button>
+      <button class="tabnav-btn tab-center" data-tab="scan">
+        <span class="tabnav-icon">＋</span>
+      </button>
+      <button class="tabnav-btn" data-tab="stats">
+        <span class="tabnav-icon">🏆</span>
+        <span>Classement</span>
+      </button>
+      <button class="tabnav-btn" data-tab="profile">
+        <span class="tabnav-icon">👤</span>
+        <span>Profil</span>
+      </button>
+    </nav>
+
+    <!-- TAB: LOCATIONS -->
+    <div class="tab-content active" id="tab-locations">
+      <div class="locations-scroll" id="locationsScroll"></div>
+      <div class="location-view">
+        <div class="location-header">
+          <h2 id="currentLocationTitle">Choisir un lieu</h2>
+          <span class="location-count" id="locationBirdCount"></span>
+        </div>
+        <ul class="bird-cards" id="birdList"></ul>
+        <div class="empty-state" id="emptyState">
+          <span>🌿</span>
+          <p>Aucun oiseau observé ici encore.<br>Ajoutez un screenshot Merlin !</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: BIRDDEX -->
+    <div class="tab-content" id="tab-birddex">
+      <div class="birddex-header">
+        <h2>Mon BirdrDex</h2>
+        <div class="birddex-progress">
+          <span id="birddexCount">0 espèces</span>
+          <div class="progress-bar"><div class="progress-fill" id="birddexFill"></div></div>
+        </div>
+      </div>
+      <div class="birddex-search">
+        <input type="text" id="birddexSearch" placeholder="🔍 Rechercher un oiseau...">
+      </div>
+      <ul class="birddex-list" id="birddexList"></ul>
+    </div>
+
+    <!-- TAB: SCAN -->
+    <div class="tab-content" id="tab-scan">
+      <div class="scan-container">
+        <div class="scan-card">
+          <div class="scan-icon">📸</div>
+          <h3>Analyser un screenshot</h3>
+          <p>Prends un screenshot de l'app Merlin après une détection sonore</p>
+          <label class="file-label">
+            <input type="file" id="imageInput" accept="image/*">
+            <span>Choisir une image</span>
+          </label>
+          <div class="location-select-row">
+            <label>Lieu d'observation :</label>
+            <select id="locationSelect"></select>
+          </div>
+          <!-- Multi-profile picker -->
+          <div class="scan-for-row" id="scanForRow">
+            <label class="scan-for-label">Ajouter pour :</label>
+            <div class="scan-profiles-picker" id="scanProfilesPicker"></div>
+          </div>
+          <button class="btn-analyze" id="analyzeBtn">
+            🔍 Analyser & Ajouter
+          </button>
+          <div class="scan-status" id="scanStatus"></div>
+        </div>
+        <div class="ocr-debug" id="ocrDebug">
+          <details>
+            <summary>Debug OCR</summary>
+            <pre id="ocrResult"></pre>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: CLASSEMENT -->
+    <div class="tab-content" id="tab-stats">
+      <div class="stats-container">
+        <h2>🏆 Classement</h2>
+        <div id="leaderboardList"></div>
+      </div>
+    </div>
+
+    <!-- TAB: PROFILE -->
+    <div class="tab-content" id="tab-profile">
+      <div class="profile-tab-container" id="profileTabContent"></div>
+    </div>
+
+  </div>
+
+  <!-- DISCOVERY MODAL -->
+  <div class="modal-overlay" id="discoveryModal">
+    <div class="modal-card">
+      <div class="modal-confetti" id="modalConfetti"></div>
+      <div class="modal-emoji">🎉</div>
+      <h3 class="modal-title">Nouvelle découverte !</h3>
+      <div class="modal-birds" id="modalBirds"></div>
+      <div class="modal-xp">
+        <span class="xp-badge">+<span id="modalXp">0</span> XP</span>
+      </div>
+      <button class="btn-modal-close" id="modalClose">Continuer →</button>
+    </div>
+  </div>
+
+  <!-- PROFILE SWITCHER MODAL (pop-up blanc avec belles cards) -->
+  <div class="modal-overlay" id="profileSwitcherModal">
+    <div class="modal-card psw-modal-card">
+      <div class="psw-modal-header">
+        <h3 class="psw-modal-title">Changer de profil</h3>
+        <button class="psw-modal-close" id="closeSwitcher">✕</button>
+      </div>
+      <div id="pswProfilesList" class="psw-modal-list"></div>
+      <button class="psw-modal-add" id="pswAddBtn">＋ Nouveau profil</button>
+    </div>
+  </div>
+
+  <!-- ADD PROFILE MODAL (from switcher) -->
+  <div class="modal-overlay" id="addProfileModal">
+    <div class="modal-card modal-sm">
+      <h3>Nouveau profil</h3>
+      <input type="text" class="input-name" id="profileNameInput" placeholder="Votre prénom..." maxlength="20">
+      <div class="avatar-picker" id="avatarPicker"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="cancelProfile">Annuler</button>
+        <button class="btn-confirm" id="confirmProfile">Créer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FICHE OISEAU (bottom sheet) -->
+  <div class="bird-sheet-overlay" id="birdSheetOverlay">
+    <div class="bird-sheet" id="birdSheet">
+      <div class="bird-sheet-handle"></div>
+      <!-- Hero photo -->
+      <div class="bird-sheet-hero" id="birdSheetHero">
+        <img id="birdSheetHeroImg" src="" alt="">
+        <div class="bird-sheet-hero-overlay"></div>
+        <div class="bird-sheet-hero-name" id="birdSheetHeroName"></div>
+        <button class="bird-sheet-close" id="birdSheetClose">✕</button>
+      </div>
+      <!-- Galerie -->
+      <div class="bird-sheet-gallery" id="birdSheetGallery"></div>
+      <!-- Corps -->
+      <div class="bird-sheet-body" id="birdSheetBody">
+        <div class="bird-sheet-loading">
+          <div class="bird-sheet-spinner"></div>
+          Chargement de la fiche…
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // Reveal app once fonts + css loaded (prevents FOUC)
+    if (document.fonts) {
+      document.fonts.ready.then(() => document.body.classList.add('ready'));
+    } else {
+      window.addEventListener('load', () => document.body.classList.add('ready'));
+    }
+  </script>
+</body>
+</html>

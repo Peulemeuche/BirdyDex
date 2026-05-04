@@ -119,14 +119,11 @@ async function pullLocationsFromFirebase() {
   try {
     const snap = await firebaseDb.ref(`groups/${groupCode}/locations`).once("value");
     const data = snap.val();
-    if (!data) return;
     const db = getDB();
-    if (!db.groupLocs) db.groupLocs = [];
-    Object.values(data).forEach(entry => {
-      if (entry.name && !db.groupLocs.includes(entry.name)) {
-        db.groupLocs.push(entry.name);
-      }
-    });
+    // Reconstruction complète (pas d'accumulation d'anciens noms)
+    db.groupLocs = data
+      ? Object.values(data).filter(e => e && e.name).map(e => e.name)
+      : [];
     saveDB(db);
   } catch(e) { console.error("pullLocations error:", e); }
 }
@@ -227,17 +224,16 @@ function startRealtimeSync() {
   // Sync lieux du groupe en temps réel → tout le monde voit les nouveaux lieux
   firebaseDb.ref(`groups/${groupCode}/locations`).on("value", snap => {
     const data = snap.val();
-    if (!data) return;
     const db = getDB();
-    if (!db.groupLocs) db.groupLocs = [];
-    let changed = false;
-    Object.values(data).forEach(entry => {
-      if (entry.name && !db.groupLocs.includes(entry.name)) {
-        db.groupLocs.push(entry.name);
-        changed = true;
-      }
-    });
-    if (changed) {
+    // Reconstruire groupLocs entièrement depuis Firebase
+    // (sinon les renommages/suppressions ne se reflètent pas)
+    const newLocs = data
+      ? Object.values(data).filter(e => e && e.name).map(e => e.name)
+      : [];
+    const oldLocs = db.groupLocs || [];
+    const same = newLocs.length === oldLocs.length && newLocs.every(l => oldLocs.includes(l));
+    if (!same) {
+      db.groupLocs = newLocs;
       saveDB(db);
       if (currentProfileId) {
         renderLocationsTab();

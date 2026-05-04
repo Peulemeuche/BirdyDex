@@ -574,6 +574,117 @@ body {
   letter-spacing: 0.3px;
 }
 
+
+/* ========== RARITY SYSTEM – BIRD CARDS ========== */
+
+/* Peu commun : bordure ambrée + fond chaud */
+.bird-card.uncommon {
+  border-left: 3px solid var(--amber);
+  background: linear-gradient(135deg, #fff 85%, rgba(212,134,42,0.07) 100%);
+  box-shadow: 0 4px 20px rgba(212,134,42,0.18);
+}
+
+/* Rare : bordure rouge + halo animé */
+.bird-card.rare {
+  border-left: 3px solid var(--red-breast);
+  background: linear-gradient(135deg, #fff 80%, rgba(192,67,42,0.07) 100%);
+  box-shadow: 0 4px 24px rgba(192,67,42,0.25);
+  animation: slideIn 0.3s ease, rareCardGlow 2.5s ease-in-out infinite;
+}
+@keyframes rareCardGlow {
+  0%, 100% { box-shadow: 0 4px 24px rgba(192,67,42,0.25); }
+  50%       { box-shadow: 0 4px 32px rgba(192,67,42,0.45); }
+}
+
+/* Badge rareté inline dans la liste */
+.rarity-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.rarity-badge.uncommon {
+  background: rgba(212,134,42,0.15);
+  color: #7a5c0f;
+}
+.rarity-badge.rare {
+  background: rgba(192,67,42,0.12);
+  color: var(--red-breast);
+}
+
+/* Pastille point rareté dans le nom */
+.rarity-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.rarity-dot.uncommon {
+  background: linear-gradient(90deg, var(--amber) 50%, rgba(212,134,42,0.3) 50%);
+}
+.rarity-dot.rare {
+  background: var(--red-breast);
+}
+
+/* ========== RARITY SYSTEM – BIRDDEX CARDS ========== */
+
+/* Peu commun : cadre ambré + coin décoratif */
+.birddex-item.uncommon {
+  border: 2px solid var(--amber);
+  box-shadow: 0 4px 16px rgba(212,134,42,0.22);
+}
+.birddex-item.uncommon::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 22px 22px 0;
+  border-color: transparent var(--amber) transparent transparent;
+}
+
+/* Rare : cadre rouge + coin + pulse */
+.birddex-item.rare {
+  border: 2px solid var(--red-breast);
+  box-shadow: 0 4px 20px rgba(192,67,42,0.3);
+  animation: fadeIn 0.3s ease, rareDexPulse 2.5s ease-in-out infinite;
+}
+.birddex-item.rare::before {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 26px 26px 0;
+  border-color: transparent var(--red-breast) transparent transparent;
+}
+@keyframes rareDexPulse {
+  0%, 100% { box-shadow: 0 4px 20px rgba(192,67,42,0.3); }
+  50%       { box-shadow: 0 4px 32px rgba(192,67,42,0.55); }
+}
+
+/* Badge rareté dans birddex */
+.birddex-item-badge.uncommon {
+  background: var(--amber);
+}
+.birddex-item-badge.rare {
+  background: var(--red-breast);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
 /* ========== SCAN TAB ========== */
 .scan-container {
   padding: 24px 16px;

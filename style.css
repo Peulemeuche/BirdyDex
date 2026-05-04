@@ -2150,16 +2150,15 @@ body {
   border: none;
   font-size: 13px;
   color: rgba(255,255,255,0.45);
-  cursor: pointer;
+  cursor: default;
   padding: 0;
   line-height: 1;
-  transition: color 0.15s, transform 0.15s;
   flex-shrink: 0;
+  pointer-events: none;
 }
 .loc-chip-star.active {
   color: #f5c518;
 }
-.loc-chip-star:hover { transform: scale(1.2); }
 /* chip fav : léger fond doré */
 .loc-chip.fav {
   border-color: rgba(245,197,24,0.5);
@@ -2265,3 +2264,77 @@ body {
   color: white;
   font-weight: 600;
 }
+
+/* ========== BADGE FRÉQUENCE ========== */
+.freq-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-top: 3px;
+  letter-spacing: 0.2px;
+}
+
+/* ========== SONS XENO-CANTO ========== */
+.sound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.sound-item {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.sound-type-badge {
+  background: var(--forest);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.sound-info {
+  flex: 1;
+  min-width: 0;
+}
+.sound-place {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sound-by {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+.sound-player {
+  width: 100%;
+  height: 32px;
+  border-radius: 20px;
+  accent-color: var(--forest);
+  margin-top: 4px;
+}
+.sound-more-link {
+  display: block;
+  text-align: center;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--forest);
+  text-decoration: none;
+  opacity: 0.75;
+}
+.sound-more-link:hover { opacity: 1; }

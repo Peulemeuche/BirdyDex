@@ -1199,7 +1199,7 @@ function renderSortBar(containerId, currentSort, onSort, showFreq = false) {
   row.className = "sort-row";
   row.innerHTML = '<span class="sort-label">Trier :</span>';
   const btns = [["date","📅 Date"],["alpha","🔤 A→Z"],["rarity","⭐ Rareté"]];
-  if (showFreq) btns.push(["freq","📊 Présence"]);
+  if (showFreq) btns.push(["freq","📊 %"]);
   btns.forEach(([key, label]) => {
     const btn = document.createElement("button");
     btn.className = "sort-btn" + (currentSort === key ? " active" : "");
@@ -1236,13 +1236,8 @@ function renderLocationsTab() {
     const star = document.createElement("span");
     star.className = "loc-chip-star" + (isFav ? " active" : "");
     star.textContent = isFav ? "★" : "☆";
-    star.title = isFav ? "Retirer des favoris" : "Ajouter aux favoris";
-    star.onclick = (e) => {
-      e.stopPropagation();
-      toggleFavLoc(loc);
-      renderLocationsTab();
-      renderLocationSelect();
-    };
+    // Pas de onclick ici — l'étoile est juste un indicateur visuel
+    // Le toggle fav se fait uniquement via l'étoile dans le titre du lieu ouvert
 
     const label = document.createElement("span");
     label.textContent = loc;

@@ -225,8 +225,6 @@ function startRealtimeSync() {
   firebaseDb.ref(`groups/${groupCode}/locations`).on("value", snap => {
     const data = snap.val();
     const db = getDB();
-    // Reconstruire groupLocs entièrement depuis Firebase
-    // (sinon les renommages/suppressions ne se reflètent pas)
     const newLocs = data
       ? Object.values(data).filter(e => e && e.name).map(e => e.name)
       : [];
@@ -239,6 +237,18 @@ function startRealtimeSync() {
         renderLocationsTab();
         renderLocationSelect();
       }
+    }
+  });
+
+  // Sync renamedDefaults (pour que tous les appareils voient les renommages des lieux par défaut)
+  firebaseDb.ref(`groups/${groupCode}/renamedDefaults`).on("value", snap => {
+    const data = snap.val();
+    const db = getDB();
+    db.renamedDefaults = data || {};
+    saveDB(db);
+    if (currentProfileId) {
+      renderLocationsTab();
+      renderLocationSelect();
     }
   });
 
@@ -960,23 +970,31 @@ async function renameLoc(oldName, newName) {
     db.sharedBirds[newName] = db.sharedBirds[oldName].map(b => ({ ...b, location: newName }));
     delete db.sharedBirds[oldName];
   }
-  // 2. groupLocs locale
-  if (db.groupLocs) {
-    const idx = db.groupLocs.indexOf(oldName);
-    if (idx !== -1) db.groupLocs[idx] = newName;
-    else db.groupLocs.push(newName); // au cas où
-  } else {
-    db.groupLocs = [newName];
+
+  // 2. groupLocs locale : remplacer si présent, sinon ajouter
+  if (!db.groupLocs) db.groupLocs = [];
+  const idx = db.groupLocs.indexOf(oldName);
+  if (idx !== -1) db.groupLocs[idx] = newName;
+  else if (!db.groupLocs.includes(newName)) db.groupLocs.push(newName);
+
+  // 3. renamedDefaults : mémoriser les lieux par défaut renommés pour les masquer
+  if (!db.renamedDefaults) db.renamedDefaults = {};
+  if (DEFAULT_LOCATIONS.includes(oldName)) {
+    db.renamedDefaults[oldName] = newName; // "Chalon" → "Le Chalon"
   }
+  // Propager les renommages en cascade (si on renomme un déjà-renommé)
+  Object.keys(db.renamedDefaults).forEach(orig => {
+    if (db.renamedDefaults[orig] === oldName) db.renamedDefaults[orig] = newName;
+  });
+
   saveDB(db);
 
-  // 3. Favoris
+  // 4. Favoris
   const favs = getFavLocs();
   const fi = favs.indexOf(oldName);
   if (fi !== -1) { favs[fi] = newName; localStorage.setItem("birdrFavLocs", JSON.stringify(favs)); }
 
-  // 4. Firebase : tout en UN SEUL update atomique (pas de pushLocationToFirebase séparé
-  //    qui déclencherait le listener avant que l'ancien soit supprimé)
+  // 5. Firebase : tout en UN SEUL update atomique
   if (firebaseDb && groupCode) {
     try {
       const updates = {};
@@ -988,7 +1006,7 @@ async function renameLoc(oldName, newName) {
       // Supprimer ancien lieu dans /locations
       updates[`groups/${groupCode}/locations/${locationKey(oldName)}`] = null;
 
-      // Migrer les oiseaux
+      // Migrer les oiseaux depuis l'ancien nœud Firebase
       const snap = await firebaseDb.ref(`groups/${groupCode}/sharedBirds/${locationKey(oldName)}`).once("value");
       const data = snap.val();
       if (data) {
@@ -998,7 +1016,9 @@ async function renameLoc(oldName, newName) {
         updates[`groups/${groupCode}/sharedBirds/${locationKey(oldName)}`] = null;
       }
 
-      // Un seul write → le listener voit l'état final cohérent
+      // Stocker les renommages côté Firebase aussi (pour les autres appareils)
+      updates[`groups/${groupCode}/renamedDefaults/${locationKey(oldName)}`] = newName;
+
       await firebaseDb.ref().update(updates);
     } catch(e) { console.error("renameLoc Firebase error:", e); }
   }
@@ -1051,8 +1071,10 @@ function renderLocationsTab() {
   const scroll = document.getElementById("locationsScroll");
   scroll.innerHTML = "";
 
+  const renamed = db.renamedDefaults || {};
+  const renamedOriginals = new Set(Object.keys(renamed));
   const rawLocs = [...new Set([
-    ...DEFAULT_LOCATIONS,
+    ...DEFAULT_LOCATIONS.filter(l => !renamedOriginals.has(l)), // exclure defaults renommés
     ...(db.groupLocs || []),
     ...Object.keys(db.sharedBirds || {}),
     ...(p.myLocs || [])
@@ -1191,8 +1213,10 @@ function renderLocationsTab() {
 function renderLocationSelect() {
   const db = getDB();
   const p  = getProfile(currentProfileId);
+  const renamed2 = db.renamedDefaults || {};
+  const renamedOriginals2 = new Set(Object.keys(renamed2));
   const rawLocs2 = [...new Set([
-    ...DEFAULT_LOCATIONS,
+    ...DEFAULT_LOCATIONS.filter(l => !renamedOriginals2.has(l)),
     ...(db.groupLocs || []),
     ...Object.keys(db.sharedBirds || {}),
     ...(p.myLocs || [])

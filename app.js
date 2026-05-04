@@ -944,47 +944,56 @@ function sortLocsWithFavs(locs) {
   return [...favLocs, ...nonFavLocs];
 }
 
-// Renommage d'un lieu (local + Firebase)
+// Renommage d'un lieu (local + Firebase) — tout en une seule passe atomique
 async function renameLoc(oldName, newName) {
   if (!newName || newName === oldName) return;
   const db = getDB();
 
-  // sharedBirds
+  // 1. localStorage sharedBirds
   if (db.sharedBirds && db.sharedBirds[oldName]) {
     db.sharedBirds[newName] = db.sharedBirds[oldName].map(b => ({ ...b, location: newName }));
     delete db.sharedBirds[oldName];
   }
-  // groupLocs
+  // 2. groupLocs locale
   if (db.groupLocs) {
     const idx = db.groupLocs.indexOf(oldName);
     if (idx !== -1) db.groupLocs[idx] = newName;
+    else db.groupLocs.push(newName); // au cas où
+  } else {
+    db.groupLocs = [newName];
   }
   saveDB(db);
 
-  // Favoris
+  // 3. Favoris
   const favs = getFavLocs();
   const fi = favs.indexOf(oldName);
   if (fi !== -1) { favs[fi] = newName; localStorage.setItem("birdrFavLocs", JSON.stringify(favs)); }
 
-  // Firebase
+  // 4. Firebase : tout en UN SEUL update atomique (pas de pushLocationToFirebase séparé
+  //    qui déclencherait le listener avant que l'ancien soit supprimé)
   if (firebaseDb && groupCode) {
     try {
-      // Ajouter nouveau lieu
-      await pushLocationToFirebase(newName);
-      // Migrer les oiseaux (Firebase ne supporte pas le rename natif)
+      const updates = {};
+      // Nouveau lieu dans /locations
+      updates[`groups/${groupCode}/locations/${locationKey(newName)}`] = {
+        name: newName,
+        createdAt: new Date().toISOString()
+      };
+      // Supprimer ancien lieu dans /locations
+      updates[`groups/${groupCode}/locations/${locationKey(oldName)}`] = null;
+
+      // Migrer les oiseaux
       const snap = await firebaseDb.ref(`groups/${groupCode}/sharedBirds/${locationKey(oldName)}`).once("value");
       const data = snap.val();
       if (data) {
-        const updates = {};
         Object.entries(data).forEach(([k, v]) => {
           updates[`groups/${groupCode}/sharedBirds/${locationKey(newName)}/${k}`] = { ...v, location: newName };
         });
-        updates[`groups/${groupCode}/locations/${locationKey(oldName)}`] = null; // supprimer
-        updates[`groups/${groupCode}/sharedBirds/${locationKey(oldName)}`] = null; // supprimer
-        await firebaseDb.ref().update(updates);
-      } else {
-        await firebaseDb.ref(`groups/${groupCode}/locations/${locationKey(oldName)}`).remove();
+        updates[`groups/${groupCode}/sharedBirds/${locationKey(oldName)}`] = null;
       }
+
+      // Un seul write → le listener voit l'état final cohérent
+      await firebaseDb.ref().update(updates);
     } catch(e) { console.error("renameLoc Firebase error:", e); }
   }
 

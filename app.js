@@ -558,17 +558,16 @@ async function pushNotificationsForProfiles(profileIds, fromProfile, newBirdsCou
 function listenForNotifications(profileId) {
   if (!firebaseDb || !groupCode || !profileId) return;
   firebaseDb.ref(`groups/${groupCode}/notifications/${profileId}`)
-    .orderByChild("read").equalTo(false)
     .on("value", snap => {
       const data = snap.val();
-      const count = data ? Object.keys(data).length : 0;
-      updateNotifBadge(count);
-      if (count > 0) {
-        // Show toast for the most recent unread notif
-        const notifs = Object.entries(data).map(([k, v]) => ({ key: k, ...v }));
-        notifs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        const latest = notifs[0];
-        showNotifToast(latest, profileId, notifs);
+      if (!data) { updateNotifBadge(0); return; }
+      // Filtrer côté client (évite le warning Firebase index)
+      const allNotifs = Object.entries(data).map(([k, v]) => ({ key: k, ...v }));
+      const unread = allNotifs.filter(n => !n.read);
+      updateNotifBadge(unread.length);
+      if (unread.length > 0) {
+        unread.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        showNotifToast(unread[0], profileId, unread);
       }
     });
 }
@@ -793,21 +792,32 @@ function promptDevReset() {
   resetAllData();
 }
 
-function resetAllData() {
-  const confirmed = confirm("⚠️ Supprimer TOUS les profils, oiseaux et données locales ?\n\nLes données Firebase (liste partagée) ne sont pas effacées.");
+async function resetAllData() {
+  const confirmed = confirm("⚠️ Supprimer TOUS les profils, oiseaux, lieux et données ?\n\nCela efface aussi Firebase (données partagées du groupe).");
   if (!confirmed) return;
-  localStorage.clear();
-  groupCode = null;
-  currentProfileId = null;
-  if (syncListener && firebaseDb) {
+
+  // Effacer Firebase en premier (on a encore groupCode)
+  if (firebaseDb && groupCode) {
+    try {
+      await firebaseDb.ref(`groups/${groupCode}`).remove();
+      console.log("✅ Firebase groupe effacé");
+    } catch(e) { console.error("Erreur reset Firebase:", e); }
+  }
+
+  // Couper les listeners
+  if (syncListener && firebaseDb && groupCode) {
     firebaseDb.ref(`groups/${groupCode}/sharedBirds`).off("value", syncListener);
     syncListener = null;
   }
+
+  localStorage.clear();
+  groupCode = null;
+  currentProfileId = null;
   document.getElementById("appScreen").classList.remove("active");
   document.getElementById("profileScreen").classList.remove("active");
   selectedAvatar = AVATARS[0];
   showOnboarding();
-  alert("✅ Données locales effacées. Rechargez si besoin.");
+  alert("✅ Tout effacé (local + Firebase). L'app repart de zéro.");
 }
 function showDiscoveryModal(birds, xp) {
   haptic("success");
@@ -1001,6 +1011,43 @@ async function renameLoc(oldName, newName) {
   renderLocationsTab();
   renderLocationSelect();
 }
+
+// Supprimer un lieu (local + Firebase)
+async function deleteLoc(locName) {
+  const db = getDB();
+
+  // localStorage : sharedBirds
+  if (db.sharedBirds) delete db.sharedBirds[locName];
+
+  // localStorage : groupLocs
+  if (db.groupLocs) db.groupLocs = db.groupLocs.filter(l => l !== locName);
+
+  saveDB(db);
+
+  // Favoris
+  const favs = getFavLocs().filter(f => f !== locName);
+  localStorage.setItem("birdrFavLocs", JSON.stringify(favs));
+
+  // Firebase : supprimer lieu + oiseaux en une seule passe
+  if (firebaseDb && groupCode) {
+    try {
+      const updates = {};
+      updates[`groups/${groupCode}/locations/${locationKey(locName)}`] = null;
+      updates[`groups/${groupCode}/sharedBirds/${locationKey(locName)}`] = null;
+      await firebaseDb.ref().update(updates);
+    } catch(e) { console.error("deleteLoc Firebase error:", e); }
+  }
+
+  // Aller sur le premier lieu disponible
+  const remaining = [...new Set([
+    ...DEFAULT_LOCATIONS,
+    ...(getDB().groupLocs || []),
+    ...Object.keys(getDB().sharedBirds || {})
+  ])];
+  currentLocation = remaining[0] || DEFAULT_LOCATIONS[0];
+  renderLocationsTab();
+  renderLocationSelect();
+}
 // ========== ONGLET LIEUX ==========
 function renderLocationsTab() {
   const db     = getDB();
@@ -1093,9 +1140,21 @@ function renderLocationsTab() {
     }
   };
 
+  const deleteBtn = document.createElement("button");
+  deleteBtn.className = "loc-title-delete";
+  deleteBtn.innerHTML = "🗑️";
+  deleteBtn.title = "Supprimer ce lieu";
+  deleteBtn.onclick = async () => {
+    const code = prompt(`Taper DELETE pour confirmer la suppression de "${currentLocation}" et tous ses oiseaux :`);
+    if (code === null) return;
+    if (code !== "DELETE") { alert("Code incorrect. Rien n'a été supprimé."); return; }
+    await deleteLoc(currentLocation);
+  };
+
   title.appendChild(starBtn);
   title.appendChild(nameSpan);
   title.appendChild(editBtn);
+  title.appendChild(deleteBtn);
 
   countEl.textContent = birds.length + " oiseau" + (birds.length > 1 ? "x" : "");
   list.innerHTML      = "";

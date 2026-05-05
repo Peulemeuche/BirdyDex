@@ -27,13 +27,21 @@ export default {
 
     // ── Xeno-canto (GET ?xeno=1&query=...) ──
     if (request.method === "GET" && url.searchParams.get("xeno") === "1") {
-      const query = url.searchParams.get("query") || "";
-      if (!query) {
+      const rawQuery = url.searchParams.get("query") || "";
+      if (!rawQuery) {
         return new Response(JSON.stringify({ error: "query required" }), {
           status: 400,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
       }
+
+      // ── Fix API v3 : les requêtes sans tag sont refusées (400).
+      // Si la query ne contient pas déjà un tag (présence de ":"),
+      // on la convertit en sp:"genre espece" (recherche par nom scientifique complet).
+      // Ex: "Phoenicurus ochruros" → sp:"phoenicurus ochruros"
+      const query = rawQuery.includes(":")
+        ? rawQuery
+        : `sp:"${rawQuery.toLowerCase()}"`;
 
       // Vérifier que la clé est configurée
       if (!env.XENO_KEY) {

@@ -1857,11 +1857,8 @@ async function fetchXenoCanto(birdName, sciName) {
   if (!window._xenoCache) window._xenoCache = {};
 
   try {
-    const query = sciName
-      ? `name:"${sciName}"`
-      : birdName;
-
-    // Passer par le Worker Cloudflare qui a la clé XENO_KEY
+    // Xeno-canto : nom scientifique directement (sans guillemets ni préfixe)
+    const query = sciName || birdName;
     const resp = await fetch(WORKER_URL + "?xeno=1&query=" + encodeURIComponent(query), {
       method: "GET"
     });

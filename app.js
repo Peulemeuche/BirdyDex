@@ -1847,33 +1847,78 @@ async function fetchWikipediaInfo(frenchName) {
 
 
 // ========== XENO-CANTO (sons d'oiseaux) ==========
-// Xeno-canto : on utilise leur widget embed (l'API directe est bloquée CORS)
-// L'embed iframe charge les sons directement depuis leur site
-function getXenoCantoQuery(frenchName, sciName) {
-  return sciName ? sciName : frenchName;
+// ========== XENO-CANTO API v3 (via Cloudflare Worker) ==========
+// API v3 nécessite une clé — stockée dans le Worker en variable secrète XENO_KEY
+// Le Worker fait le call API et renvoie les enregistrements
+
+async function fetchXenoCanto(birdName, sciName) {
+  const cacheKey = sciName || birdName;
+  if (window._xenoCache && window._xenoCache[cacheKey]) return window._xenoCache[cacheKey];
+  if (!window._xenoCache) window._xenoCache = {};
+
+  try {
+    const query = sciName
+      ? `name:"${sciName}"`
+      : birdName;
+
+    // Passer par le Worker Cloudflare qui a la clé XENO_KEY
+    const resp = await fetch(WORKER_URL + "?xeno=1&query=" + encodeURIComponent(query), {
+      method: "GET"
+    });
+    if (!resp.ok) throw new Error("xeno " + resp.status);
+    const data = await resp.json();
+    const recs = (data.recordings || []).slice(0, 8);
+    const result = {
+      songs: recs.filter(r => /song|chant/i.test(r.type||"")),
+      calls: recs.filter(r => /call|cri|alarm/i.test(r.type||"")),
+      all:   recs
+    };
+    window._xenoCache[cacheKey] = result;
+    return result;
+  } catch(e) {
+    console.warn("fetchXenoCanto failed:", e);
+    return null;
+  }
 }
 
 function renderSoundsSection(sounds, birdName, sciName) {
-  // sounds = null car on n'utilise plus l'API, on utilise l'embed
   const query = encodeURIComponent(sciName || birdName);
-  const embedUrl = `https://xeno-canto.org/species/embed?query=${query}&view=3`;
   const exploreUrl = `https://xeno-canto.org/explore?query=${query}`;
+
+  if (!sounds || sounds.all.length === 0) {
+    return `
+      <div class="bird-sheet-section">
+        <div class="bird-sheet-section-title">🎧 Chants & Cris</div>
+        <a href="${exploreUrl}" target="_blank" rel="noopener" class="sound-more-link" style="margin-top:0">
+          🔊 Écouter sur Xeno-canto →
+        </a>
+      </div>
+    `;
+  }
+
+  const tracks = [
+    ...sounds.songs.slice(0,2).map(r => ({ ...r, typeLabel: "🎵 Chant" })),
+    ...sounds.calls.slice(0,2).map(r => ({ ...r, typeLabel: "📢 Cri" }))
+  ];
+  const finalTracks = tracks.length > 0 ? tracks : sounds.all.slice(0,3).map(r => ({ ...r, typeLabel: "🔊 Son" }));
+
+  const items = finalTracks.map(r => `
+    <div class="sound-item">
+      <div class="sound-type-badge">${r.typeLabel}</div>
+      <div class="sound-info">
+        <div class="sound-place">📍 ${r.loc || "?"}</div>
+        <div class="sound-by">par ${r.rec || "?"}</div>
+      </div>
+      <audio class="sound-player" controls preload="none">
+        <source src="https:${r.file}" type="audio/mpeg">
+      </audio>
+    </div>
+  `).join("");
 
   return `
     <div class="bird-sheet-section">
       <div class="bird-sheet-section-title">🎧 Chants & Cris</div>
-      <div class="sound-embed-wrap">
-        <iframe
-          src="${embedUrl}"
-          width="100%"
-          height="200"
-          frameborder="0"
-          scrolling="no"
-          style="border-radius:12px;display:block;"
-          loading="lazy"
-          title="Sons de ${birdName} — Xeno-canto"
-        ></iframe>
-      </div>
+      <div class="sound-list">${items}</div>
       <a href="${exploreUrl}" target="_blank" rel="noopener" class="sound-more-link">
         Écouter plus sur Xeno-canto →
       </a>
@@ -1898,9 +1943,11 @@ function openBirdSheet(birdName, birdObservations) {
   document.body.style.overflow = "hidden";
 
   // Charger les infos Wikipedia en arrière-plan
-  // Charger Wikipedia pour avoir le nom scientifique (utilisé par Xeno-canto embed)
-  fetchWikipediaInfo(birdName).then(info => {
-    renderBirdSheet(birdName, birdObservations, info, knownImage, null);
+  // Charger Wikipedia d'abord, puis Xeno-canto avec le nom scientifique
+  fetchWikipediaInfo(birdName).then(async info => {
+    const sciName = info?.sciName || null;
+    const sounds  = await fetchXenoCanto(birdName, sciName);
+    renderBirdSheet(birdName, birdObservations, info, knownImage, sounds);
   });
 }
 window.openBirdSheet = openBirdSheet;

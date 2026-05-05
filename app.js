@@ -1847,71 +1847,36 @@ async function fetchWikipediaInfo(frenchName) {
 
 
 // ========== XENO-CANTO (sons d'oiseaux) ==========
-const xenoCache = {};
-
-async function fetchXenoCanto(frenchName, sciName = null) {
-  const cacheKey = frenchName;
-  if (xenoCache[cacheKey]) return xenoCache[cacheKey];
-  try {
-    // Xeno-canto fonctionne mieux avec le nom scientifique latin
-    // On essaie d'abord avec le nom sci, puis fallback nom français
-    const query = sciName
-      ? sciName.replace(/ /g, "+")
-      : encodeURIComponent(frenchName);
-
-    // L'API xeno-canto supporte CORS nativement — pas besoin de proxy
-    const url = `https://xeno-canto.org/api/2/recordings?query=${query}&page=1`;
-    const resp = await fetch(url, { headers: { "Accept": "application/json" } });
-    if (!resp.ok) throw new Error(`xeno-canto ${resp.status}`);
-    const data = await resp.json();
-
-    const recordings = (data.recordings || []).slice(0, 8);
-    const songs = recordings.filter(r => r.type && /song|chant/i.test(r.type)).slice(0, 2);
-    const calls = recordings.filter(r => r.type && /call|cri|alarm/i.test(r.type)).slice(0, 2);
-
-    const result = {
-      songs,
-      calls,
-      all: recordings.slice(0, 3)
-    };
-    xenoCache[cacheKey] = result;
-    return result;
-  } catch(e) {
-    console.warn("fetchXenoCanto failed:", e);
-    return null;
-  }
+// Xeno-canto : on utilise leur widget embed (l'API directe est bloquée CORS)
+// L'embed iframe charge les sons directement depuis leur site
+function getXenoCantoQuery(frenchName, sciName) {
+  return sciName ? sciName : frenchName;
 }
 
-function renderSoundsSection(sounds) {
-  if (!sounds) return "";
-  const tracks = [
-    ...sounds.songs.map(r => ({ ...r, typeLabel: "🎵 Chant" })),
-    ...sounds.calls.map(r => ({ ...r, typeLabel: "📢 Cri" }))
-  ];
-  // Si pas de songs/calls séparés, utiliser all
-  const finalTracks = tracks.length > 0 ? tracks : sounds.all.map(r => ({ ...r, typeLabel: "🔊 Son" }));
-  if (finalTracks.length === 0) return "";
-
-  const items = finalTracks.map(r => `
-    <div class="sound-item">
-      <div class="sound-type-badge">${r.typeLabel}</div>
-      <div class="sound-info">
-        <div class="sound-place">📍 ${r.loc || "Lieu inconnu"}</div>
-        <div class="sound-by">par ${r.rec || "?"}</div>
-      </div>
-      <audio class="sound-player" controls preload="none" src="https:${r.file}">
-        <source src="https:${r.file}" type="audio/mpeg">
-      </audio>
-    </div>
-  `).join("");
+function renderSoundsSection(sounds, birdName, sciName) {
+  // sounds = null car on n'utilise plus l'API, on utilise l'embed
+  const query = encodeURIComponent(sciName || birdName);
+  const embedUrl = `https://xeno-canto.org/species/embed?query=${query}&view=3`;
+  const exploreUrl = `https://xeno-canto.org/explore?query=${query}`;
 
   return `
     <div class="bird-sheet-section">
       <div class="bird-sheet-section-title">🎧 Chants & Cris</div>
-      <div class="sound-list">${items}</div>
-      <a href="https://xeno-canto.org/explore?query=${encodeURIComponent(finalTracks[0]?.sp || '')}"
-         target="_blank" rel="noopener"
-         class="sound-more-link">Écouter plus sur Xeno-canto →</a>
+      <div class="sound-embed-wrap">
+        <iframe
+          src="${embedUrl}"
+          width="100%"
+          height="200"
+          frameborder="0"
+          scrolling="no"
+          style="border-radius:12px;display:block;"
+          loading="lazy"
+          title="Sons de ${birdName} — Xeno-canto"
+        ></iframe>
+      </div>
+      <a href="${exploreUrl}" target="_blank" rel="noopener" class="sound-more-link">
+        Écouter plus sur Xeno-canto →
+      </a>
     </div>
   `;
 }
@@ -1933,11 +1898,9 @@ function openBirdSheet(birdName, birdObservations) {
   document.body.style.overflow = "hidden";
 
   // Charger les infos Wikipedia en arrière-plan
-  // Charger Wikipedia d'abord pour avoir le nom scientifique, puis Xeno-canto
-  fetchWikipediaInfo(birdName).then(async info => {
-    const sciName = info?.sciName || null;
-    const sounds  = await fetchXenoCanto(birdName, sciName);
-    renderBirdSheet(birdName, birdObservations, info, knownImage, sounds);
+  // Charger Wikipedia pour avoir le nom scientifique (utilisé par Xeno-canto embed)
+  fetchWikipediaInfo(birdName).then(info => {
+    renderBirdSheet(birdName, birdObservations, info, knownImage, null);
   });
 }
 window.openBirdSheet = openBirdSheet;
@@ -2031,7 +1994,7 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
       <div class="bird-sheet-my-obs">${myObs || "<div style='color:var(--muted);font-size:13px;padding:8px 0;'>Aucune observation enregistrée</div>"}</div>
     </div>
 
-    ${renderSoundsSection(sounds)}
+    ${renderSoundsSection(sounds, birdName, info?.sciName || null)}
 
     ${info?.wikiUrl ? `
     <a href="${info.wikiUrl}" target="_blank" rel="noopener" style="display:block;text-align:center;color:var(--forest);font-size:13px;font-weight:600;padding:14px;background:white;border-radius:14px;text-decoration:none;box-shadow:0 2px 8px rgba(0,0,0,0.07);">

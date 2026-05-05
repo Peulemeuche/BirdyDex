@@ -2278,53 +2278,10 @@ body {
 }
 
 /* ========== SONS XENO-CANTO ========== */
-.sound-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 4px;
-}
-.sound-item {
-  background: #f8f9fa;
+.sound-embed-wrap {
   border-radius: 12px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.sound-type-badge {
-  background: var(--forest);
-  color: white;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 10px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.sound-info {
-  flex: 1;
-  min-width: 0;
-}
-.sound-place {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--charcoal);
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sound-by {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 1px;
-}
-.sound-player {
-  width: 100%;
-  height: 32px;
-  border-radius: 20px;
-  accent-color: var(--forest);
+  background: #f8f9fa;
   margin-top: 4px;
 }
 .sound-more-link {

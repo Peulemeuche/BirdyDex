@@ -1925,33 +1925,6 @@ function renderSoundsSection(sounds, birdName, sciName) {
     </div>
   `;
 }
-// ========== GEMINI : INFOS ESPÈCE (habitat / régime / type) ==========
-const _speciesInfoCache = {};
-
-async function fetchBirdSpeciesInfo(birdName) {
-  if (_speciesInfoCache[birdName]) return _speciesInfoCache[birdName];
-
-  const prompt = `Pour l'oiseau "${birdName}", donne exactement ces 3 informations en JSON.
-Règles strictes :
-- habitat : milieu de vie principal, 2-3 mots max en français (ex: "Forêts mixtes", "Zones humides", "Prairies ouvertes", "Milieu urbain")
-- regime  : alimentation principale, 1-2 mots max en français (ex: "Insectivore", "Granivore", "Omnivore", "Piscivore", "Frugivore")
-- type    : statut migratoire, 1-2 mots max en français (ex: "Migrateur", "Sédentaire", "Hivernant", "Nicheur", "Nomade")
-Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
-
-  try {
-    const resp = await fetch(
-      WORKER_URL + "?species=1&name=" + encodeURIComponent(birdName),
-      { method: "GET" }
-    );
-    const parsed = await resp.json();
-    _speciesInfoCache[birdName] = parsed;
-    return parsed;
-  } catch(e) {
-    console.warn("fetchBirdSpeciesInfo failed:", e);
-    return { habitat: "—", regime: "—", type: "—" };
-  }
-}
-
 function openBirdSheet(birdName, birdObservations) {
   const overlay = document.getElementById("birdSheetOverlay");
   const heroImg = document.getElementById("birdSheetHeroImg");
@@ -2020,7 +1993,6 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
   const shortDesc = sentences.slice(0, 2).join(" ");
   const fullDesc  = sentences.slice(2, 6).join(" ");
 
-  // Placeholder chips pendant le chargement Gemini
   body.innerHTML = `
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span class="bird-sheet-observed">✅ ${observations.length} observation${observations.length > 1 ? "s" : ""} par ta famille</span>
@@ -2034,18 +2006,18 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
 
     <div class="bird-sheet-stats" id="birdStatChips">
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-label">Habitat</div>
         <div class="bird-stat-chip-icon">🌡️</div>
+        <div class="bird-stat-chip-label">Habitat</div>
         <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-label">Régime</div>
         <div class="bird-stat-chip-icon">🍎</div>
+        <div class="bird-stat-chip-label">Régime</div>
         <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-label">Type</div>
         <div class="bird-stat-chip-icon">🗺️</div>
+        <div class="bird-stat-chip-label">Type</div>
         <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
     </div>
@@ -2069,7 +2041,7 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
     </a>` : ""}
   `;
 
-  // Charger les infos espèce via Gemini en arrière-plan
+  // Charger habitat/régime/type via Gemini en arrière-plan
   fetchBirdSpeciesInfo(birdName).then(species => {
     const chips = document.getElementById("birdStatChips");
     if (!chips) return;
@@ -2078,6 +2050,30 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
     if (vals[1]) { vals[1].textContent = species.regime  || "—"; vals[1].classList.remove("bird-stat-loading"); }
     if (vals[2]) { vals[2].textContent = species.type    || "—"; vals[2].classList.remove("bird-stat-loading"); }
   });
+}
+
+// ========== GEMINI : INFOS ESPÈCE (habitat / régime / type) ==========
+const _speciesInfoCache = {};
+
+async function fetchBirdSpeciesInfo(birdName) {
+  if (_speciesInfoCache[birdName]) return _speciesInfoCache[birdName];
+
+  const prompt = `Pour l'oiseau "${birdName}", donne exactement ces 3 informations en JSON.
+Règles strictes :
+- habitat : milieu de vie principal, 2-3 mots max en français (ex: "Forêts mixtes", "Zones humides", "Prairies ouvertes", "Milieu urbain")
+- regime  : alimentation principale, 1-2 mots max en français (ex: "Insectivore", "Granivore", "Omnivore", "Piscivore", "Frugivore")
+- type    : statut migratoire, 1-2 mots max en français (ex: "Migrateur", "Sédentaire", "Hivernant", "Nicheur", "Nomade")
+Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
+
+  try {
+    const resp = await fetch(WORKER_URL + "?species=1&name=" + encodeURIComponent(birdName));
+    const parsed = await resp.json();
+    _speciesInfoCache[birdName] = parsed;
+    return parsed;
+  } catch(e) {
+    console.warn("fetchBirdSpeciesInfo failed:", e);
+    return { habitat: "—", regime: "—", type: "—" };
+  }
 }
 
 function closeBirdSheet() {

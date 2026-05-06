@@ -26,7 +26,7 @@ export default {
     const url = new URL(request.url);
 
     // ── Infos espèce Gemini (GET ?species=1&name=...) ──
-    if (request.method === "GET" && url.searchParams.get("species") === "1") {
+    if (url.searchParams.get("species") === "1") {
       const birdName = url.searchParams.get("name") || "";
       if (!birdName) {
         return new Response(JSON.stringify({ error: "name required" }), {
@@ -43,7 +43,7 @@ Règles strictes :
 Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
 
       try {
-        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`;
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${env.GEMINI_KEY}`;
         const geminiResp = await fetch(geminiUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -52,13 +52,12 @@ Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat
         const geminiData = await geminiResp.json();
         const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
         const clean = text.replace(/```json|```/g, "").trim();
-        // Valider que c'est du JSON valide
-        JSON.parse(clean);
+        JSON.parse(clean); // valider
         return new Response(clean, {
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "public, max-age=86400" // cache 24h côté CDN
+            "Cache-Control": "public, max-age=86400"
           }
         });
       } catch(err) {

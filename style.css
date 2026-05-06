@@ -921,6 +921,74 @@ body {
   text-align: center;
   color: white;
   margin-bottom: 20px;
+  position: relative;
+}
+
+/* Bouton crayon édition profil */
+.profile-hero-edit-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255,255,255,0.18);
+  border: 1.5px solid rgba(255,255,255,0.28);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.15s;
+  backdrop-filter: blur(4px);
+}
+.profile-hero-edit-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: scale(1.08);
+}
+.profile-hero-edit-btn:active { transform: scale(0.95); }
+
+/* Modal édition profil */
+.edit-profile-modal-card {
+  padding: 0;
+  overflow: hidden;
+  max-width: 360px;
+  width: 100%;
+  text-align: left;
+}
+.edit-profile-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+}
+.edit-profile-modal-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--charcoal);
+}
+.edit-profile-modal-body {
+  padding: 20px 20px 0;
+}
+.edit-profile-actions {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px 20px;
+}
+.edit-save-btn {
+  flex: 1;
+  justify-content: center;
+  margin-top: 0 !important;
+  padding: 13px 16px !important;
+  font-size: 15px !important;
+}
+.edit-profile-modal-card .ob-field {
+  padding: 0 20px;
+}
+.edit-profile-modal-card .ob-field:first-of-type {
+  margin-top: 20px;
 }
 
 .profile-hero-avatar {

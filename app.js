@@ -426,17 +426,7 @@ async function extractBirdNamesWithGemini(base64Image) {
   const body = {
     contents: [{
       parts: [
-        { text: `Tu analyses un screenshot de l'app Merlin Bird ID. Liste TOUS les oiseaux visibles.
-
-RÈGLE DE RARETÉ — lis uniquement la petite pastille/icône circulaire placée IMMÉDIATEMENT à droite du nom de l'oiseau, sur la même ligne :
-- Pastille ROUGE pleine (cercle rouge uni) → "rare"
-- Pastille ORANGE/MARRON à moitié remplie (demi-cercle, moitié colorée moitié vide) → "uncommon"
-- AUCUNE pastille à droite du nom → "common"
-
-IMPORTANT : si tu ne vois PAS de pastille clairement identifiable juste après le nom, mets OBLIGATOIREMENT "common". Ne devine pas. Le doute = "common".
-
-Retourne UNIQUEMENT ce JSON, sans texte autour :
-{"birds": [{"name": "Merle noir", "rarity": "common"}, {"name": "Fauvette babillarde", "rarity": "rare"}, {"name": "Corbeau freux", "rarity": "uncommon"}]}` },
+        { text: 'Liste les oiseaux sur ce screenshot de l\'app Merlin. Pour chaque oiseau, indique son nom français ET sa rareté (déterminée par la pastille visible à droite de son nom : pastille rouge = "rare", pastille marron/ambre à moitié remplie = "uncommon", pas de pastille = "common"). Retourne UNIQUEMENT un objet JSON avec une clé "birds" contenant un tableau d\'objets. Exemple: {"birds": [{"name": "Merle noir", "rarity": "common"}, {"name": "Fauvette babillarde", "rarity": "rare"}, {"name": "Corbeau freux", "rarity": "uncommon"}]}. Réponds UNIQUEMENT avec le JSON, sans texte avant ou après.' },
         { inline_data: { mime_type: "image/png", data: pureBase64.trim() } }
       ]
     }]
@@ -1560,6 +1550,7 @@ function renderProfileTab() {
 
   document.getElementById("profileTabContent").innerHTML = `
     <div class="profile-hero">
+      <button class="profile-hero-edit-btn" id="profileEditBtn">✏️</button>
       <span class="profile-hero-avatar">${p.avatar}</span>
       <div class="profile-hero-name">${p.name}</div>
       <div class="profile-hero-level">Niveau ${lvl.level}</div>
@@ -1641,7 +1632,64 @@ function renderProfileTab() {
       ··· Options développeur
     </button>
   `;
+
+  // Bouton crayon edit profil
+  document.getElementById("profileEditBtn").addEventListener("click", openEditProfileModal);
 }
+
+// ── Édition profil (nom + avatar) ──────────────────────────
+function openEditProfileModal() {
+  const p = getProfile(currentProfileId);
+
+  // Pré-remplir le champ nom
+  document.getElementById("editNameInput").value = p.name;
+
+  // Construire le picker d'avatars
+  const picker = document.getElementById("editAvatarPicker");
+  picker.innerHTML = AVATARS.map(a => `
+    <button type="button" class="ob-avatar-btn ${a === p.avatar ? "selected" : ""}"
+      data-avatar="${a}">${a}</button>
+  `).join("");
+
+  // Listener sur chaque bouton avatar
+  picker.querySelectorAll(".ob-avatar-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      picker.querySelectorAll(".ob-avatar-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+    });
+  });
+
+  document.getElementById("editProfileModal").style.display = "flex";
+  setTimeout(() => document.getElementById("editNameInput").focus(), 150);
+}
+
+function closeEditProfileModal() {
+  document.getElementById("editProfileModal").style.display = "none";
+}
+
+function saveEditProfile() {
+  const p = getProfile(currentProfileId);
+  const newName = document.getElementById("editNameInput").value.trim();
+  const selectedBtn = document.querySelector("#editAvatarPicker .ob-avatar-btn.selected");
+
+  if (!newName) {
+    document.getElementById("editNameInput").style.borderColor = "#c0432a";
+    document.getElementById("editNameInput").focus();
+    return;
+  }
+
+  p.name   = newName;
+  p.avatar = selectedBtn ? selectedBtn.dataset.avatar : p.avatar;
+  saveProfile(p);
+
+  // Rafraîchir topbar sans changer d'onglet
+  document.getElementById("topbarName").textContent = p.name;
+  document.getElementById("topbarAvatar").textContent = p.avatar;
+
+  closeEditProfileModal();
+  renderProfileTab();
+}
+// ───────────────────────────────────────────────────────────
 
 function copyGroupCode() {
   if (groupCode) navigator.clipboard.writeText(groupCode).then(() => alert("Code copié ! " + groupCode));

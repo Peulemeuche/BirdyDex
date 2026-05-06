@@ -1549,8 +1549,7 @@ function renderProfileTab() {
   `;
 
   document.getElementById("profileTabContent").innerHTML = `
-    <div class="profile-hero" style="position:relative;">
-      <button class="profile-edit-btn" onclick="openEditProfileModal()" title="Modifier le profil">✏️</button>
+    <div class="profile-hero">
       <span class="profile-hero-avatar">${p.avatar}</span>
       <div class="profile-hero-name">${p.name}</div>
       <div class="profile-hero-level">Niveau ${lvl.level}</div>
@@ -1633,57 +1632,6 @@ function renderProfileTab() {
     </button>
   `;
 }
-
-// ========== EDIT PROFILE MODAL ==========
-let editSelectedAvatar = null;
-
-function openEditProfileModal() {
-  const p = getProfile(currentProfileId);
-  if (!p) return;
-  editSelectedAvatar = p.avatar;
-
-  // Fill fields
-  document.getElementById("editNameInput").value = p.name;
-
-  // Render avatar picker
-  const picker = document.getElementById("editAvatarPicker");
-  picker.innerHTML = "";
-  AVATARS.forEach(av => {
-    const btn = document.createElement("button");
-    btn.className = "ob-avatar-btn" + (av === editSelectedAvatar ? " selected" : "");
-    btn.textContent = av;
-    btn.onclick = () => {
-      editSelectedAvatar = av;
-      picker.querySelectorAll(".ob-avatar-btn").forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-    };
-    picker.appendChild(btn);
-  });
-
-  document.getElementById("editProfileModal").style.display = "flex";
-}
-window.openEditProfileModal = openEditProfileModal;
-
-function closeEditProfileModal() {
-  document.getElementById("editProfileModal").style.display = "none";
-}
-window.closeEditProfileModal = closeEditProfileModal;
-
-function saveEditProfile() {
-  const name = (document.getElementById("editNameInput").value || "").trim();
-  if (!name) { document.getElementById("editNameInput").focus(); return; }
-  const p = getProfile(currentProfileId);
-  if (!p) return;
-  p.name   = name;
-  p.avatar = editSelectedAvatar || p.avatar;
-  saveProfile(p);
-  closeEditProfileModal();
-  renderProfileTab();
-  // Update topbar
-  document.getElementById("topbarName").textContent  = p.name;
-  document.getElementById("topbarAvatar").textContent = p.avatar;
-}
-window.saveEditProfile = saveEditProfile;
 
 function copyGroupCode() {
   if (groupCode) navigator.clipboard.writeText(groupCode).then(() => alert("Code copié ! " + groupCode));
@@ -2046,12 +1994,54 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
   const shortDesc = sentences.slice(0, 2).join(" ");
   const fullDesc  = sentences.slice(2, 6).join(" ");
 
-  // Tenter d'extraire taille/poids depuis l'extrait
-  const tailleMatch = extract.match(/(\d+[,.]?\d*)\s*(?:à|-|–)\s*(\d+[,.]?\d*)\s*cm/i);
-  const poidsMatch  = extract.match(/(\d+[,.]?\d*)\s*(?:à|-|–)\s*(\d+[,.]?\d*)\s*g/i);
+  // --- Habitat ---
+  // Cherche "forêt", "prairie", "zone humide", "bois", "montagne", "côte", "urbain", etc.
+  const habitatPatterns = [
+    /\b(forêts?(?:\s+\w+)?|bois(?:\s+\w+)?)\b/i,
+    /\b(zones?\s+humides?|marais|marécages?|étangs?|rivières?|cours\s+d'eau)\b/i,
+    /\b(prairies?|champs?|milieux?\s+ouverts?|espaces?\s+ouverts?)\b/i,
+    /\b(montagnes?|alpins?|collines?)\b/i,
+    /\b(côtes?|littoral|falaises?|mers?|océans?)\b/i,
+    /\b(milieux?\s+urbains?|villes?|jardins?|parcs?)\b/i,
+    /\b(haies?|bocages?|broussailles?)\b/i,
+    /\b(méditerranéens?|semi-arides?)\b/i,
+  ];
+  let habitat = "—";
+  for (const pat of habitatPatterns) {
+    const m = extract.match(pat);
+    if (m) { habitat = m[0].charAt(0).toUpperCase() + m[0].slice(1); break; }
+  }
 
-  const taille = tailleMatch ? `${tailleMatch[1]}–${tailleMatch[2]} cm` : "—";
-  const poids  = poidsMatch  ? `${poidsMatch[1]}–${poidsMatch[2]} g`   : "—";
+  // --- Régime alimentaire ---
+  const regimePatterns = [
+    { pat: /\b(insectivore|insectes?)\b/i,           label: "Insectivore" },
+    { pat: /\b(granivore|graines?|céréales?)\b/i,    label: "Granivore" },
+    { pat: /\b(frugivore|fruits?|baies?)\b/i,        label: "Frugivore" },
+    { pat: /\b(carnivore|proies?|rongeurs?)\b/i,     label: "Carnivore" },
+    { pat: /\b(nectarivore|nectar)\b/i,              label: "Nectarivore" },
+    { pat: /\b(piscivore|poissons?)\b/i,             label: "Piscivore" },
+    { pat: /\b(omnivore)\b/i,                        label: "Omnivore" },
+    { pat: /\b(invertébrés?|vers?\b|limaces?)\b/i,   label: "Invertébrés" },
+    { pat: /\b(charognard|charognes?)\b/i,           label: "Charognard" },
+  ];
+  let regime = "—";
+  for (const { pat, label } of regimePatterns) {
+    if (pat.test(extract)) { regime = label; break; }
+  }
+
+  // --- Type / statut migratoire ---
+  const typePatterns = [
+    { pat: /\b(migrateur|migratrice|migrateurs?|migratoires?)\b/i,  label: "Migrateur" },
+    { pat: /\b(sédentaire|résident\s+permanent)\b/i,                label: "Sédentaire" },
+    { pat: /\b(hivernant|visiteur\s+d.hiver)\b/i,                   label: "Hivernant" },
+    { pat: /\b(nicheur|niche\s+en)\b/i,                             label: "Nicheur" },
+    { pat: /\b(erratique|nomade)\b/i,                               label: "Nomade" },
+    { pat: /\b(partiel(?:lement)?\s+migrat\w+)\b/i,                 label: "Migr. partiel" },
+  ];
+  let birdType = "—";
+  for (const { pat, label } of typePatterns) {
+    if (pat.test(extract)) { birdType = label; break; }
+  }
 
   body.innerHTML = `
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -2066,19 +2056,19 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
 
     <div class="bird-sheet-stats">
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">📏</div>
-        <div class="bird-stat-chip-val">${taille}</div>
-        <div class="bird-stat-chip-label">Taille</div>
+        <div class="bird-stat-chip-icon">🌡️</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${habitat}</div>
+        <div class="bird-stat-chip-label">Habitat</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">⚖️</div>
-        <div class="bird-stat-chip-val">${poids}</div>
-        <div class="bird-stat-chip-label">Poids</div>
+        <div class="bird-stat-chip-icon">🍎</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${regime}</div>
+        <div class="bird-stat-chip-label">Régime</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">📅</div>
-        <div class="bird-stat-chip-val">${new Date(observations[0].date).toLocaleDateString("fr-FR", {day:"numeric", month:"short"})}</div>
-        <div class="bird-stat-chip-label">1ère obs.</div>
+        <div class="bird-stat-chip-icon">🗺️</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${birdType}</div>
+        <div class="bird-stat-chip-label">Type</div>
       </div>
     </div>
 

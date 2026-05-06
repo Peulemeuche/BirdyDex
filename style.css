@@ -966,77 +966,6 @@ body {
   margin-top: 6px;
 }
 
-/* ========== PROFILE EDIT BUTTON ========== */
-.profile-edit-btn {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  background: rgba(255,255,255,0.18);
-  border: none;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-  -webkit-tap-highlight-color: transparent;
-}
-.profile-edit-btn:hover { background: rgba(255,255,255,0.28); }
-
-/* ========== EDIT PROFILE MODAL ========== */
-.edit-profile-modal-card {
-  width: 100%;
-  max-width: 380px;
-  padding: 24px;
-  border-radius: var(--radius);
-  background: var(--warm-white);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.edit-profile-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.edit-profile-modal-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 20px;
-  color: var(--forest);
-}
-
-.edit-profile-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-.edit-profile-actions .btn-cancel {
-  flex: 1;
-  padding: 12px;
-  background: none;
-  border: 2px solid var(--parchment);
-  border-radius: var(--radius-sm);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.edit-save-btn {
-  flex: 2;
-  margin-top: 0 !important;
-  padding: 12px 16px !important;
-  font-size: 15px !important;
-}
-
 /* ========== MODALS ========== */
 .modal-overlay {
   position: fixed;
@@ -1888,6 +1817,13 @@ body {
   font-weight: 700;
   color: var(--charcoal);
   line-height: 1.2;
+}
+/* Valeurs textuelles (habitat, régime, type) — police plus petite pour tenir */
+.bird-stat-chip-val--sm {
+  font-size: 11px;
+  font-weight: 600;
+  word-break: break-word;
+  hyphens: auto;
 }
 .bird-stat-chip-label {
   font-size: 10px;

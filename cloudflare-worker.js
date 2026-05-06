@@ -50,10 +50,47 @@ Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
         const geminiData = await geminiResp.json();
-        const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-        const clean = text.replace(/```json|```/g, "").trim();
-        JSON.parse(clean); // valider
-        return new Response(clean, {
+        const raw = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+        // Nettoyage : retirer markdown, apostrophes typographiques, espaces parasites
+        const clean = raw
+          .replace(/```json|```/gi, "")
+          .replace(/[\u2018\u2019]/g, "'")   // apostrophes typographiques → standard
+          .replace(/[\u201C\u201D]/g, '"')   // guillemets typographiques → standard
+          .trim();
+
+        // Tentative 1 : JSON.parse direct
+        let result = null;
+        try {
+          result = JSON.parse(clean);
+        } catch(_) {
+          // Tentative 2 : extraire avec regex champ par champ
+          const get = (key) => {
+            const m = clean.match(new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`));
+            return m ? m[1].trim() : null;
+          };
+          const habitat = get("habitat");
+          const regime  = get("regime");
+          const type    = get("type");
+          if (habitat || regime || type) {
+            result = {
+              habitat: habitat || "—",
+              regime:  regime  || "—",
+              type:    type    || "—"
+            };
+          }
+        }
+
+        if (!result || (!result.habitat && !result.regime && !result.type)) {
+          throw new Error("Pas de données exploitables");
+        }
+
+        // Garantir que les 3 champs existent
+        result.habitat = result.habitat || "—";
+        result.regime  = result.regime  || "—";
+        result.type    = result.type    || "—";
+
+        return new Response(JSON.stringify(result), {
           headers: {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",

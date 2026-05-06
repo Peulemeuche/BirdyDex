@@ -426,7 +426,17 @@ async function extractBirdNamesWithGemini(base64Image) {
   const body = {
     contents: [{
       parts: [
-        { text: 'Liste les oiseaux sur ce screenshot de l\'app Merlin. Pour chaque oiseau, indique son nom français ET sa rareté (déterminée par la pastille visible à droite de son nom : pastille rouge = "rare", pastille marron/ambre à moitié remplie = "uncommon", pas de pastille = "common"). Retourne UNIQUEMENT un objet JSON avec une clé "birds" contenant un tableau d\'objets. Exemple: {"birds": [{"name": "Merle noir", "rarity": "common"}, {"name": "Fauvette babillarde", "rarity": "rare"}, {"name": "Corbeau freux", "rarity": "uncommon"}]}. Réponds UNIQUEMENT avec le JSON, sans texte avant ou après.' },
+        { text: `Tu analyses un screenshot de l'app Merlin Bird ID. Liste TOUS les oiseaux visibles.
+
+RÈGLE DE RARETÉ — lis uniquement la petite pastille/icône circulaire placée IMMÉDIATEMENT à droite du nom de l'oiseau, sur la même ligne :
+- Pastille ROUGE pleine (cercle rouge uni) → "rare"
+- Pastille ORANGE/MARRON à moitié remplie (demi-cercle, moitié colorée moitié vide) → "uncommon"
+- AUCUNE pastille à droite du nom → "common"
+
+IMPORTANT : si tu ne vois PAS de pastille clairement identifiable juste après le nom, mets OBLIGATOIREMENT "common". Ne devine pas. Le doute = "common".
+
+Retourne UNIQUEMENT ce JSON, sans texte autour :
+{"birds": [{"name": "Merle noir", "rarity": "common"}, {"name": "Fauvette babillarde", "rarity": "rare"}, {"name": "Corbeau freux", "rarity": "uncommon"}]}` },
         { inline_data: { mime_type: "image/png", data: pureBase64.trim() } }
       ]
     }]

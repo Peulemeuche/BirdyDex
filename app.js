@@ -4,16 +4,15 @@ const WORKER_URL = "https://birdyrex.peulmeule-valentin.workers.dev";
 const DEFAULT_LOCATIONS = ["Avelin", "Brétignolles", "Chalon", "Bienvillers"];
 const AVATARS = ["🦅", "🦉", "🦜", "🐦", "🦚", "🦩", "🦆", "🐧", "🦋", "🌿"];
 const BADGES = [
-  { id: "first",    icon: "🥚", name: "Premier envol",  desc: "1er oiseau",         req: p => uniqueMyBirds(p).length >= 1  },
-  { id: "five",     icon: "🌿", name: "Observateur",    desc: "5 espèces",           req: p => uniqueMyBirds(p).length >= 5  },
-  { id: "ten",      icon: "🔭", name: "Naturaliste",    desc: "10 espèces",          req: p => uniqueMyBirds(p).length >= 10 },
-  { id: "twenty",   icon: "📚", name: "Ornithologue",   desc: "20 espèces",          req: p => uniqueMyBirds(p).length >= 20 },
-  { id: "traveler", icon: "🗺️", name: "Explorateur",    desc: "3+ lieux visités",    req: p => (p.myLocs || []).length >= 3  },
-  { id: "master",   icon: "🏆", name: "Maître Birdr",   desc: "50 espèces",          req: p => uniqueMyBirds(p).length >= 50 },
-  // Nouveaux badges
-  { id: "rarebird", icon: "⭐", name: "Chasseur rare",  desc: "1ère espèce rare",    req: p => uniqueMyBirds(p).some(b => b.rarity === "rare") },
-  { id: "rarehunt", icon: "💎", name: "Traqueur",       desc: "5 espèces rares",     req: p => uniqueMyBirds(p).filter(b => b.rarity === "rare").length >= 5 },
-  { id: "earlybird",icon: "🌅", name: "Lève-tôt",       desc: "Obs. avant 7h du mat",req: p => (p.myBirds || []).some(b => { try { return new Date(b.date).getHours() < 7; } catch(e) { return false; } }) },
+  { id: "first",    icon: "🥚", name: "Premier envol",  desc: "1er oiseau",        req: p => uniqueMyBirds(p).length >= 1  },
+  { id: "five",     icon: "🌿", name: "Observateur",    desc: "5 espèces",          req: p => uniqueMyBirds(p).length >= 5  },
+  { id: "ten",      icon: "🔭", name: "Naturaliste",    desc: "10 espèces",         req: p => uniqueMyBirds(p).length >= 10 },
+  { id: "twenty",   icon: "📚", name: "Ornithologue",   desc: "20 espèces",         req: p => uniqueMyBirds(p).length >= 20 },
+  { id: "traveler", icon: "🗺️", name: "Explorateur",    desc: "3+ lieux visités",  req: p => (p.myLocs || []).length >= 3  },
+  { id: "master",   icon: "🏆", name: "Maître Birdr",   desc: "50 espèces",         req: p => uniqueMyBirds(p).length >= 50 },
+  { id: "rarebird", icon: "⭐", name: "Chasseur rare",  desc: "1ère espèce rare",   req: p => uniqueMyBirds(p).some(b => b.rarity === "rare") },
+  { id: "rarehunt", icon: "💎", name: "Traqueur",       desc: "5 espèces rares",    req: p => uniqueMyBirds(p).filter(b => b.rarity === "rare").length >= 5 },
+  { id: "raregod",  icon: "🔥", name: "Légende",        desc: "15 espèces rares",   req: p => uniqueMyBirds(p).filter(b => b.rarity === "rare").length >= 15 },
 ];
 
 const FIREBASE_CONFIG = {
@@ -1911,7 +1910,7 @@ function renderSoundsSection(sounds, birdName, sciName) {
         <div class="sound-by">par ${r.rec || "?"}</div>
       </div>
       <audio class="sound-player" controls preload="none">
-        <source src="${r.file && r.file.startsWith('http') ? r.file : 'https:' + r.file}" type="audio/mpeg">
+        <source src="https:${r.file}" type="audio/mpeg">
       </audio>
     </div>
   `).join("");

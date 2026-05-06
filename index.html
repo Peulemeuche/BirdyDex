@@ -36,10 +36,10 @@
     #onboardingScreen { display: none; position: fixed; inset: 0; z-index: 200; background: #1a3a16; }
   </style>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
 </head>
 <body>
-
-<link rel="icon" href="icon-192.png">
 
 <!-- ===== ÉCRAN ACCUEIL (nouveau profil - 1ère connexion) ===== -->
 <div id="onboardingScreen">
@@ -222,11 +222,14 @@
           </button>
           <div class="scan-status" id="scanStatus"></div>
         </div>
-        <div class="ocr-debug" id="ocrDebug">
-          <details>
-            <summary>Debug OCR</summary>
-            <pre id="ocrResult"></pre>
-          </details>
+        <div class="scan-history-section" id="scanHistorySection">
+          <div class="scan-history-header">
+            <span class="scan-history-title">📋 Historique des scans</span>
+            <span class="scan-history-count" id="scanHistoryCount"></span>
+          </div>
+          <div class="scan-history-list" id="scanHistoryList">
+            <div class="scan-history-empty">Aucun scan encore effectué</div>
+          </div>
         </div>
       </div>
     </div>
@@ -340,6 +343,20 @@
           <span class="ob-btn-arrow">→</span>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL "DÉJÀ CONNUS" -->
+  <div class="modal-overlay" id="alreadyKnownModal">
+    <div class="modal-card">
+      <div class="modal-emoji">🌿</div>
+      <h3 class="modal-title">Déjà dans ton carnet !</h3>
+      <p class="modal-subtitle" id="alreadyKnownSubtitle"></p>
+      <div class="modal-birds" id="alreadyKnownBirds"></div>
+      <div class="already-known-note">
+        Ces observations sont quand même comptabilisées pour les <strong>% de présence</strong> par lieu 📊
+      </div>
+      <button class="btn-modal-close" id="alreadyKnownClose">Compris →</button>
     </div>
   </div>
 

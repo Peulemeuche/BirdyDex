@@ -716,6 +716,14 @@ document.getElementById("analyzeBtn").addEventListener("click", async () => {
           const othersIds = selectedIds.filter(id => id !== currentProfileId);
           await pushNotificationsForProfiles(othersIds, me, totalNewBirds, totalXp);
         }
+        // Enregistrer dans l'historique des scans
+        const birdsWithImages = birds.map((b, i) => ({
+          name:   typeof b === "string" ? b : b.name,
+          rarity: typeof b === "object" ? b.rarity : "common",
+          image:  birdImages[i] || ""
+        }));
+        addToScanHistory(birdsWithImages, location);
+
         status.textContent = "";
         document.getElementById("imageInput").value = "";
       } catch(err) {
@@ -887,9 +895,9 @@ async function addBirdsToProfile(names, images, location, targetProfileId = null
     }
   } else {
     saveProfile(p);
-    // Only alert for the active profile
+    // Only show for the active profile
     if (!targetProfileId || targetProfileId === currentProfileId) {
-      alert("Aucun nouvel oiseau pour toi dans ce lot 🙂");
+      showAlreadyKnownModal(names, location);
     }
   }
   return { newCount: newBirds.length, xpGained };
@@ -983,9 +991,172 @@ document.getElementById("modalClose").onclick = () => {
   // Aller sur l'onglet Lieux du lieu où les oiseaux ont été ajoutés
   switchTab("locations");
 };
-
+document.getElementById("alreadyKnownClose").onclick = () => {
+  document.getElementById("alreadyKnownModal").classList.remove("show");
+};
 });
-// ========== ÉCRAN PROFILS (utilisateurs déjà connectés) ==========
+
+// ── Modal "déjà connus" ──────────────────────────────────────
+function showAlreadyKnownModal(birdObjs, location) {
+  haptic("light");
+  const names = birdObjs.map(b => typeof b === "string" ? b : b.name);
+  const subtitle = document.getElementById("alreadyKnownSubtitle");
+  const list     = document.getElementById("alreadyKnownBirds");
+
+  subtitle.textContent = `${names.length} oiseau${names.length > 1 ? "x" : ""} scanné${names.length > 1 ? "s" : ""} à ${location}`;
+
+  list.innerHTML = names.map(name => {
+    const { stats } = getFrequencyStats(location);
+    const freq = stats[name] ? `<span class="already-known-freq">${stats[name].label}</span>` : "";
+    return `
+      <div class="modal-bird-item">
+        <span class="modal-bird-name">${name}</span>
+        ${freq}
+      </div>`;
+  }).join("");
+
+  document.getElementById("alreadyKnownModal").classList.add("show");
+}
+
+// ── Historique des scans ─────────────────────────────────────
+function getScanHistory() {
+  const db = getDB();
+  return (db.scanHistory || []);
+}
+
+function saveScanHistory(history) {
+  const db = getDB();
+  db.scanHistory = history;
+  saveDB(db);
+}
+
+function addToScanHistory(birds, location) {
+  const history = getScanHistory();
+  history.unshift({
+    id: Date.now(),
+    date: new Date().toISOString(),
+    location,
+    birds // [{name, rarity, image}]
+  });
+  // Garder max 50 entrées
+  saveScanHistory(history.slice(0, 50));
+  renderScanHistory();
+}
+
+async function deleteScanEntry(entryId) {
+  if (!confirm("Supprimer ce scan ? Les oiseaux ajoutés uniquement via ce scan seront retirés de ta liste et de la liste partagée.")) return;
+
+  const history = getScanHistory();
+  const entry   = history.find(h => h.id === entryId);
+  if (!entry) return;
+
+  const p  = getProfile(currentProfileId);
+  const db = getDB();
+
+  // Oiseaux à potentiellement supprimer (ceux de ce scan)
+  const scanNames = entry.birds.map(b => b.name);
+
+  // Vérifier quels oiseaux apparaissent UNIQUEMENT dans ce scan (pas dans d'autres entrées)
+  const otherEntries = history.filter(h => h.id !== entryId);
+  const namesInOther = new Set(otherEntries.flatMap(h => h.birds.map(b => b.name)));
+  const toRemove     = scanNames.filter(n => !namesInOther.has(n));
+
+  // Retirer du profil personnel
+  p.myBirds = (p.myBirds || []).filter(b => !toRemove.includes(b.name));
+
+  // Recalculer XP (25 par commun, 50 uncommon, 100 rare)
+  const XP = { common: 25, uncommon: 50, rare: 100 };
+  let removedXp = 0;
+  toRemove.forEach(name => {
+    const bird = entry.birds.find(b => b.name === name);
+    removedXp += XP[(bird?.rarity) || "common"] || 25;
+  });
+  p.xp = Math.max(0, (p.xp || 0) - removedXp);
+
+  // Retirer myLocs si plus d'oiseaux dans ce lieu
+  const remainingLocs = [...new Set((p.myBirds || []).map(b => b.location))];
+  p.myLocs = remainingLocs;
+
+  saveProfile(p);
+
+  // Retirer de sharedBirds si plus personne d'autre ne les a
+  const allProfiles = getAllProfiles().filter(pr => pr.id !== currentProfileId);
+  const othersNames = new Set(allProfiles.flatMap(pr => (pr.myBirds || []).map(b => b.name)));
+  const sharedBirds  = getSharedBirds(entry.location);
+  const newShared    = sharedBirds.filter(b => !toRemove.includes(b.name) || othersNames.has(b.name));
+  saveSharedBirds(entry.location, newShared);
+
+  // Firebase : supprimer les oiseaux concernés
+  if (firebaseDb && groupCode) {
+    const locK = locationKey(entry.location);
+    const snap = await firebaseDb.ref(`groups/${groupCode}/sharedBirds/${locK}`).once("value");
+    const data = snap.val();
+    if (data) {
+      Object.entries(data).forEach(([key, bird]) => {
+        if (toRemove.includes(bird.name) && !othersNames.has(bird.name)) {
+          firebaseDb.ref(`groups/${groupCode}/sharedBirds/${locK}/${key}`).remove();
+        }
+      });
+    }
+  }
+
+  // Supprimer l'entrée de l'historique
+  saveScanHistory(otherEntries);
+
+  // Rafraîchir UI
+  renderScanHistory();
+  renderLocationsTab();
+  if (document.getElementById("tab-profile").classList.contains("active")) renderProfileTab();
+
+  // Recalculer badges (déjà fait via renderProfileTab si actif)
+  updateTopbarXp();
+}
+
+function updateTopbarXp() {
+  const p   = getProfile(currentProfileId);
+  const lvl = getLevel(p?.xp || 0);
+  const el  = document.getElementById("topbarXp");
+  if (el) el.textContent = `Niv.${lvl.level} · ${p?.xp || 0} XP`;
+}
+
+function renderScanHistory() {
+  const history = getScanHistory();
+  const list    = document.getElementById("scanHistoryList");
+  const count   = document.getElementById("scanHistoryCount");
+  if (!list) return;
+
+  count.textContent = history.length > 0 ? `${history.length} scan${history.length > 1 ? "s" : ""}` : "";
+
+  if (history.length === 0) {
+    list.innerHTML = `<div class="scan-history-empty">Aucun scan encore effectué</div>`;
+    return;
+  }
+
+  list.innerHTML = history.map(entry => {
+    const d    = new Date(entry.date);
+    const date = d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+    const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    const birdList = entry.birds.slice(0, 4).map(b => {
+      const dot = b.rarity === "rare" ? "🔴" : b.rarity === "uncommon" ? "🟠" : "🟢";
+      return `<span class="scan-history-bird-chip">${dot} ${b.name}</span>`;
+    }).join("");
+    const more = entry.birds.length > 4 ? `<span class="scan-history-more">+${entry.birds.length - 4}</span>` : "";
+
+    return `
+      <div class="scan-history-item">
+        <div class="scan-history-item-top">
+          <div class="scan-history-item-meta">
+            <span class="scan-history-loc">📍 ${entry.location}</span>
+            <span class="scan-history-date">${date} · ${time}</span>
+          </div>
+          <button class="scan-history-delete" onclick="deleteScanEntry(${entry.id})" title="Supprimer ce scan">🗑️</button>
+        </div>
+        <div class="scan-history-birds">${birdList}${more}</div>
+        <div class="scan-history-summary">${entry.birds.length} oiseau${entry.birds.length > 1 ? "x" : ""} scannés</div>
+      </div>`;
+  }).join("");
+}
+// ─────────────────────────────────────────────────────────────
 function renderProfileScreen() {
   const profiles = getAllProfiles();
   const list     = document.getElementById("profilesList");
@@ -1550,7 +1721,6 @@ function renderProfileTab() {
 
   document.getElementById("profileTabContent").innerHTML = `
     <div class="profile-hero">
-      <button class="profile-hero-edit-btn" id="profileEditBtn">✏️</button>
       <span class="profile-hero-avatar">${p.avatar}</span>
       <div class="profile-hero-name">${p.name}</div>
       <div class="profile-hero-level">Niveau ${lvl.level}</div>
@@ -1632,64 +1802,7 @@ function renderProfileTab() {
       ··· Options développeur
     </button>
   `;
-
-  // Bouton crayon edit profil
-  document.getElementById("profileEditBtn").addEventListener("click", openEditProfileModal);
 }
-
-// ── Édition profil (nom + avatar) ──────────────────────────
-function openEditProfileModal() {
-  const p = getProfile(currentProfileId);
-
-  // Pré-remplir le champ nom
-  document.getElementById("editNameInput").value = p.name;
-
-  // Construire le picker d'avatars
-  const picker = document.getElementById("editAvatarPicker");
-  picker.innerHTML = AVATARS.map(a => `
-    <button type="button" class="ob-avatar-btn ${a === p.avatar ? "selected" : ""}"
-      data-avatar="${a}">${a}</button>
-  `).join("");
-
-  // Listener sur chaque bouton avatar
-  picker.querySelectorAll(".ob-avatar-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      picker.querySelectorAll(".ob-avatar-btn").forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-    });
-  });
-
-  document.getElementById("editProfileModal").style.display = "flex";
-  setTimeout(() => document.getElementById("editNameInput").focus(), 150);
-}
-
-function closeEditProfileModal() {
-  document.getElementById("editProfileModal").style.display = "none";
-}
-
-function saveEditProfile() {
-  const p = getProfile(currentProfileId);
-  const newName = document.getElementById("editNameInput").value.trim();
-  const selectedBtn = document.querySelector("#editAvatarPicker .ob-avatar-btn.selected");
-
-  if (!newName) {
-    document.getElementById("editNameInput").style.borderColor = "#c0432a";
-    document.getElementById("editNameInput").focus();
-    return;
-  }
-
-  p.name   = newName;
-  p.avatar = selectedBtn ? selectedBtn.dataset.avatar : p.avatar;
-  saveProfile(p);
-
-  // Rafraîchir topbar sans changer d'onglet
-  document.getElementById("topbarName").textContent = p.name;
-  document.getElementById("topbarAvatar").textContent = p.avatar;
-
-  closeEditProfileModal();
-  renderProfileTab();
-}
-// ───────────────────────────────────────────────────────────
 
 function copyGroupCode() {
   if (groupCode) navigator.clipboard.writeText(groupCode).then(() => alert("Code copié ! " + groupCode));
@@ -1751,7 +1864,7 @@ function switchTab(tabId) {
   if (tabId === "stats")     fetchAndRenderStats();
   if (tabId === "profile")   renderProfileTab();
   if (tabId === "locations") renderLocationsTab();
-  if (tabId === "scan")      renderScanProfilePicker();
+  if (tabId === "scan")      { renderScanProfilePicker(); renderScanHistory(); }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

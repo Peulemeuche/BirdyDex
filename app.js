@@ -1925,6 +1925,33 @@ function renderSoundsSection(sounds, birdName, sciName) {
     </div>
   `;
 }
+// ========== GEMINI : INFOS ESPÈCE (habitat / régime / type) ==========
+const _speciesInfoCache = {};
+
+async function fetchBirdSpeciesInfo(birdName) {
+  if (_speciesInfoCache[birdName]) return _speciesInfoCache[birdName];
+
+  const prompt = `Pour l'oiseau "${birdName}", donne exactement ces 3 informations en JSON.
+Règles strictes :
+- habitat : milieu de vie principal, 2-3 mots max en français (ex: "Forêts mixtes", "Zones humides", "Prairies ouvertes", "Milieu urbain")
+- regime  : alimentation principale, 1-2 mots max en français (ex: "Insectivore", "Granivore", "Omnivore", "Piscivore", "Frugivore")
+- type    : statut migratoire, 1-2 mots max en français (ex: "Migrateur", "Sédentaire", "Hivernant", "Nicheur", "Nomade")
+Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
+
+  try {
+    const resp = await fetch(
+      WORKER_URL + "?species=1&name=" + encodeURIComponent(birdName),
+      { method: "GET" }
+    );
+    const parsed = await resp.json();
+    _speciesInfoCache[birdName] = parsed;
+    return parsed;
+  } catch(e) {
+    console.warn("fetchBirdSpeciesInfo failed:", e);
+    return { habitat: "—", regime: "—", type: "—" };
+  }
+}
+
 function openBirdSheet(birdName, birdObservations) {
   const overlay = document.getElementById("birdSheetOverlay");
   const heroImg = document.getElementById("birdSheetHeroImg");
@@ -1989,60 +2016,11 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
 
   // Extraire des phrases intéressantes de l'extrait Wikipedia
   const extract = info?.extract || "";
-  // Première phrase = description courte
   const sentences = extract.split(/(?<=[.!?])\s+/);
   const shortDesc = sentences.slice(0, 2).join(" ");
   const fullDesc  = sentences.slice(2, 6).join(" ");
 
-  // --- Habitat ---
-  // Cherche "forêt", "prairie", "zone humide", "bois", "montagne", "côte", "urbain", etc.
-  const habitatPatterns = [
-    /\b(forêts?(?:\s+\w+)?|bois(?:\s+\w+)?)\b/i,
-    /\b(zones?\s+humides?|marais|marécages?|étangs?|rivières?|cours\s+d'eau)\b/i,
-    /\b(prairies?|champs?|milieux?\s+ouverts?|espaces?\s+ouverts?)\b/i,
-    /\b(montagnes?|alpins?|collines?)\b/i,
-    /\b(côtes?|littoral|falaises?|mers?|océans?)\b/i,
-    /\b(milieux?\s+urbains?|villes?|jardins?|parcs?)\b/i,
-    /\b(haies?|bocages?|broussailles?)\b/i,
-    /\b(méditerranéens?|semi-arides?)\b/i,
-  ];
-  let habitat = "—";
-  for (const pat of habitatPatterns) {
-    const m = extract.match(pat);
-    if (m) { habitat = m[0].charAt(0).toUpperCase() + m[0].slice(1); break; }
-  }
-
-  // --- Régime alimentaire ---
-  const regimePatterns = [
-    { pat: /\b(insectivore|insectes?)\b/i,           label: "Insectivore" },
-    { pat: /\b(granivore|graines?|céréales?)\b/i,    label: "Granivore" },
-    { pat: /\b(frugivore|fruits?|baies?)\b/i,        label: "Frugivore" },
-    { pat: /\b(carnivore|proies?|rongeurs?)\b/i,     label: "Carnivore" },
-    { pat: /\b(nectarivore|nectar)\b/i,              label: "Nectarivore" },
-    { pat: /\b(piscivore|poissons?)\b/i,             label: "Piscivore" },
-    { pat: /\b(omnivore)\b/i,                        label: "Omnivore" },
-    { pat: /\b(invertébrés?|vers?\b|limaces?)\b/i,   label: "Invertébrés" },
-    { pat: /\b(charognard|charognes?)\b/i,           label: "Charognard" },
-  ];
-  let regime = "—";
-  for (const { pat, label } of regimePatterns) {
-    if (pat.test(extract)) { regime = label; break; }
-  }
-
-  // --- Type / statut migratoire ---
-  const typePatterns = [
-    { pat: /\b(migrateur|migratrice|migrateurs?|migratoires?)\b/i,  label: "Migrateur" },
-    { pat: /\b(sédentaire|résident\s+permanent)\b/i,                label: "Sédentaire" },
-    { pat: /\b(hivernant|visiteur\s+d.hiver)\b/i,                   label: "Hivernant" },
-    { pat: /\b(nicheur|niche\s+en)\b/i,                             label: "Nicheur" },
-    { pat: /\b(erratique|nomade)\b/i,                               label: "Nomade" },
-    { pat: /\b(partiel(?:lement)?\s+migrat\w+)\b/i,                 label: "Migr. partiel" },
-  ];
-  let birdType = "—";
-  for (const { pat, label } of typePatterns) {
-    if (pat.test(extract)) { birdType = label; break; }
-  }
-
+  // Placeholder chips pendant le chargement Gemini
   body.innerHTML = `
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
       <span class="bird-sheet-observed">✅ ${observations.length} observation${observations.length > 1 ? "s" : ""} par ta famille</span>
@@ -2054,21 +2032,21 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
       <div class="bird-sheet-section-text" style="font-style:italic;color:#555;margin-bottom:14px;">"${shortDesc}"</div>
     </div>` : ""}
 
-    <div class="bird-sheet-stats">
+    <div class="bird-sheet-stats" id="birdStatChips">
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">🌡️</div>
-        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${habitat}</div>
         <div class="bird-stat-chip-label">Habitat</div>
+        <div class="bird-stat-chip-icon">🌡️</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">🍎</div>
-        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${regime}</div>
         <div class="bird-stat-chip-label">Régime</div>
+        <div class="bird-stat-chip-icon">🍎</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
       <div class="bird-stat-chip">
-        <div class="bird-stat-chip-icon">🗺️</div>
-        <div class="bird-stat-chip-val bird-stat-chip-val--sm">${birdType}</div>
         <div class="bird-stat-chip-label">Type</div>
+        <div class="bird-stat-chip-icon">🗺️</div>
+        <div class="bird-stat-chip-val bird-stat-chip-val--sm bird-stat-loading">…</div>
       </div>
     </div>
 
@@ -2090,6 +2068,16 @@ function renderBirdSheet(birdName, observations, info, knownImage, sounds = null
       🔗 Voir la fiche complète sur Wikipedia
     </a>` : ""}
   `;
+
+  // Charger les infos espèce via Gemini en arrière-plan
+  fetchBirdSpeciesInfo(birdName).then(species => {
+    const chips = document.getElementById("birdStatChips");
+    if (!chips) return;
+    const vals = chips.querySelectorAll(".bird-stat-chip-val");
+    if (vals[0]) { vals[0].textContent = species.habitat || "—"; vals[0].classList.remove("bird-stat-loading"); }
+    if (vals[1]) { vals[1].textContent = species.regime  || "—"; vals[1].classList.remove("bird-stat-loading"); }
+    if (vals[2]) { vals[2].textContent = species.type    || "—"; vals[2].classList.remove("bird-stat-loading"); }
+  });
 }
 
 function closeBirdSheet() {

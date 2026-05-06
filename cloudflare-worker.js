@@ -25,6 +25,50 @@ export default {
 
     const url = new URL(request.url);
 
+    // ── Infos espèce Gemini (GET ?species=1&name=...) ──
+    if (request.method === "GET" && url.searchParams.get("species") === "1") {
+      const birdName = url.searchParams.get("name") || "";
+      if (!birdName) {
+        return new Response(JSON.stringify({ error: "name required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        });
+      }
+
+      const prompt = `Pour l'oiseau "${birdName}", donne exactement ces 3 informations en JSON.
+Règles strictes :
+- habitat : milieu de vie principal, 2-3 mots max en français (ex: "Forêts mixtes", "Zones humides", "Prairies ouvertes", "Milieu urbain")
+- regime  : alimentation principale, 1-2 mots max en français (ex: "Insectivore", "Granivore", "Omnivore", "Piscivore", "Frugivore")
+- type    : statut migratoire, 1-2 mots max en français (ex: "Migrateur", "Sédentaire", "Hivernant", "Nicheur", "Nomade")
+Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
+
+      try {
+        const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_KEY}`;
+        const geminiResp = await fetch(geminiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const geminiData = await geminiResp.json();
+        const text = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+        const clean = text.replace(/```json|```/g, "").trim();
+        // Valider que c'est du JSON valide
+        JSON.parse(clean);
+        return new Response(clean, {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=86400" // cache 24h côté CDN
+          }
+        });
+      } catch(err) {
+        return new Response(JSON.stringify({ habitat: "—", regime: "—", type: "—" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+        });
+      }
+    }
+
     // ── Xeno-canto (GET ?xeno=1&query=...) ──
     if (request.method === "GET" && url.searchParams.get("xeno") === "1") {
       const rawQuery = url.searchParams.get("query") || "";

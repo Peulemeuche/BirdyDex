@@ -308,6 +308,41 @@
     </div>
   </div>
 
+  <!-- EDIT PROFILE MODAL -->
+  <div class="modal-overlay" id="editProfileModal" style="display:none;">
+    <div class="modal-card edit-profile-modal-card">
+      <div class="edit-profile-modal-header">
+        <h3 class="edit-profile-modal-title">Modifier mon profil</h3>
+        <button class="psw-modal-close" onclick="closeEditProfileModal()">✕</button>
+      </div>
+
+      <div class="ob-field">
+        <label class="ob-label">Votre prénom</label>
+        <input
+          id="editNameInput"
+          type="text"
+          class="ob-input"
+          placeholder="Ex : Sophie"
+          maxlength="20"
+          autocomplete="off"
+        />
+      </div>
+
+      <div class="ob-field">
+        <label class="ob-label">Choisissez votre avatar</label>
+        <div class="ob-avatar-picker" id="editAvatarPicker"></div>
+      </div>
+
+      <div class="edit-profile-actions">
+        <button class="btn-cancel" onclick="closeEditProfileModal()">Annuler</button>
+        <button class="ob-btn edit-save-btn" onclick="saveEditProfile()">
+          <span>Enregistrer</span>
+          <span class="ob-btn-arrow">→</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
   <script>
     // Reveal app once fonts + css loaded (prevents FOUC)

@@ -1549,7 +1549,8 @@ function renderProfileTab() {
   `;
 
   document.getElementById("profileTabContent").innerHTML = `
-    <div class="profile-hero">
+    <div class="profile-hero" style="position:relative;">
+      <button class="profile-edit-btn" onclick="openEditProfileModal()" title="Modifier le profil">✏️</button>
       <span class="profile-hero-avatar">${p.avatar}</span>
       <div class="profile-hero-name">${p.name}</div>
       <div class="profile-hero-level">Niveau ${lvl.level}</div>
@@ -1632,6 +1633,57 @@ function renderProfileTab() {
     </button>
   `;
 }
+
+// ========== EDIT PROFILE MODAL ==========
+let editSelectedAvatar = null;
+
+function openEditProfileModal() {
+  const p = getProfile(currentProfileId);
+  if (!p) return;
+  editSelectedAvatar = p.avatar;
+
+  // Fill fields
+  document.getElementById("editNameInput").value = p.name;
+
+  // Render avatar picker
+  const picker = document.getElementById("editAvatarPicker");
+  picker.innerHTML = "";
+  AVATARS.forEach(av => {
+    const btn = document.createElement("button");
+    btn.className = "ob-avatar-btn" + (av === editSelectedAvatar ? " selected" : "");
+    btn.textContent = av;
+    btn.onclick = () => {
+      editSelectedAvatar = av;
+      picker.querySelectorAll(".ob-avatar-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+    };
+    picker.appendChild(btn);
+  });
+
+  document.getElementById("editProfileModal").style.display = "flex";
+}
+window.openEditProfileModal = openEditProfileModal;
+
+function closeEditProfileModal() {
+  document.getElementById("editProfileModal").style.display = "none";
+}
+window.closeEditProfileModal = closeEditProfileModal;
+
+function saveEditProfile() {
+  const name = (document.getElementById("editNameInput").value || "").trim();
+  if (!name) { document.getElementById("editNameInput").focus(); return; }
+  const p = getProfile(currentProfileId);
+  if (!p) return;
+  p.name   = name;
+  p.avatar = editSelectedAvatar || p.avatar;
+  saveProfile(p);
+  closeEditProfileModal();
+  renderProfileTab();
+  // Update topbar
+  document.getElementById("topbarName").textContent  = p.name;
+  document.getElementById("topbarAvatar").textContent = p.avatar;
+}
+window.saveEditProfile = saveEditProfile;
 
 function copyGroupCode() {
   if (groupCode) navigator.clipboard.writeText(groupCode).then(() => alert("Code copié ! " + groupCode));

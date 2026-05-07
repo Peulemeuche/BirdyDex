@@ -1000,13 +1000,6 @@ function showDiscoveryModal(birds, xp) {
 document.addEventListener("DOMContentLoaded", () => {
 document.getElementById("modalClose").onclick = () => {
   document.getElementById("discoveryModal").classList.remove("show");
-  // Aller sur l'onglet Lieux du lieu où les oiseaux ont été ajoutés
-  switchTab("locations");
-};
-
-document.addEventListener("DOMContentLoaded", () => {
-document.getElementById("modalClose").onclick = () => {
-  document.getElementById("discoveryModal").classList.remove("show");
   switchTab("locations");
 };
 const akClose = document.getElementById("alreadyKnownClose");

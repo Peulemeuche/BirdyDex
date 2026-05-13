@@ -2261,58 +2261,26 @@ const _speciesInfoCache = {};
 async function fetchBirdSpeciesInfo(birdName) {
   if (_speciesInfoCache[birdName]) return _speciesInfoCache[birdName];
 
-  const prompt = `Pour l'oiseau "${birdName}", donne exactement ces 3 informations en JSON.
-Règles strictes :
-- habitat : milieu de vie principal, 2-3 mots max en français (ex: "Forêts mixtes", "Zones humides", "Prairies ouvertes", "Milieu urbain")
-- regime  : alimentation principale, 1-2 mots max en français (ex: "Insectivore", "Granivore", "Omnivore", "Piscivore", "Frugivore")
-- type    : statut migratoire, 1-2 mots max en français (ex: "Migrateur", "Sédentaire", "Hivernant", "Nicheur", "Nomade")
-Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
-
   try {
-    // POST direct — pas de cache Cloudflare contrairement au GET
-    const resp = await fetch(WORKER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
-    });
-
-    const data = await resp.json();
-    console.log("Gemini species raw:", JSON.stringify(data).slice(0, 300));
-
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    console.log("Gemini species text:", raw);
-
-    const clean = raw
-      .replace(/```json|```/gi, "")
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/[\u201C\u201D]/g, '"')
-      .trim();
-
-    let result = null;
-    try {
-      result = JSON.parse(clean);
-    } catch(_) {
-      // Extraction champ par champ si JSON mal formé
-      const get = k => {
-        const m = clean.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]+)"'));
-        return m ? m[1].trim() : null;
-      };
-      const h = get("habitat"), r = get("regime"), t = get("type");
-      if (h || r || t) result = { habitat: h||"—", regime: r||"—", type: t||"—" };
+    // &t= pour bypasser le cache Cloudflare sur les réponses en erreur
+    const url = WORKER_URL + "?species=1&name=" + encodeURIComponent(birdName) + "&t=" + Date.now();
+    const resp = await fetch(url);
+    console.log("Species HTTP:", resp.status, birdName);
+    const text = await resp.text();
+    console.log("Species response:", text.slice(0, 300));
+    const data = JSON.parse(text);
+    if (!data.habitat && !data.regime && !data.type) {
+      throw new Error("champs vides: " + text.slice(0, 150));
     }
-
-    if (!result) throw new Error("no result — raw: " + raw.slice(0, 100));
-
-    result.habitat = result.habitat || "—";
-    result.regime  = result.regime  || "—";
-    result.type    = result.type    || "—";
-
+    const result = {
+      habitat: data.habitat || "—",
+      regime:  data.regime  || "—",
+      type:    data.type    || "—"
+    };
     _speciesInfoCache[birdName] = result;
     return result;
   } catch(e) {
-    console.warn("fetchBirdSpeciesInfo failed:", birdName, e);
+    console.warn("fetchBirdSpeciesInfo failed:", birdName, e.message);
     return { habitat: "—", regime: "—", type: "—" };
   }
 }

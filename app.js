@@ -2113,7 +2113,7 @@ function renderSoundsSection(sounds, birdName, sciName) {
         <div class="sound-by">par ${r.rec || "?"}</div>
       </div>
       <audio class="sound-player" controls preload="none">
-        <source src="${r.file && r.file.startsWith('http') ? r.file : 'https:' + r.file}" type="audio/mpeg">
+        <source src="https:${r.file}" type="audio/mpeg">
       </audio>
     </div>
   `).join("");
@@ -2269,20 +2269,21 @@ Règles strictes :
 Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat":"...","regime":"...","type":"..."}`;
 
   try {
-    // Appel POST direct via le Worker (comme l'analyse d'image) — pas de cache Cloudflare
+    // POST direct — pas de cache Cloudflare contrairement au GET
     const resp = await fetch(WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "gemini-2.0-flash",
-        max_tokens: 200,
         contents: [{ parts: [{ text: prompt }] }]
       })
     });
-    const data = await resp.json();
-    const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Nettoyage robuste
+    const data = await resp.json();
+    console.log("Gemini species raw:", JSON.stringify(data).slice(0, 300));
+
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    console.log("Gemini species text:", raw);
+
     const clean = raw
       .replace(/```json|```/gi, "")
       .replace(/[\u2018\u2019]/g, "'")
@@ -2294,12 +2295,15 @@ Réponds UNIQUEMENT avec le JSON brut, sans markdown ni texte autour : {"habitat
       result = JSON.parse(clean);
     } catch(_) {
       // Extraction champ par champ si JSON mal formé
-      const get = k => { const m = clean.match(new RegExp(`"${k}"\\s*:\\s*"([^"]+)"`)); return m ? m[1].trim() : null; };
+      const get = k => {
+        const m = clean.match(new RegExp('"' + k + '"\\s*:\\s*"([^"]+)"'));
+        return m ? m[1].trim() : null;
+      };
       const h = get("habitat"), r = get("regime"), t = get("type");
-      if (h || r || t) result = { habitat: h || "—", regime: r || "—", type: t || "—" };
+      if (h || r || t) result = { habitat: h||"—", regime: r||"—", type: t||"—" };
     }
 
-    if (!result) throw new Error("no result");
+    if (!result) throw new Error("no result — raw: " + raw.slice(0, 100));
 
     result.habitat = result.habitat || "—";
     result.regime  = result.regime  || "—";

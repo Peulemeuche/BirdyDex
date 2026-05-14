@@ -2113,7 +2113,7 @@ function renderSoundsSection(sounds, birdName, sciName) {
         <div class="sound-by">par ${r.rec || "?"}</div>
       </div>
       <audio class="sound-player" controls preload="none">
-        <source src="https:${r.file}" type="audio/mpeg">
+        <source src="${r.file && r.file.startsWith('http') ? r.file : 'https:' + r.file}" type="audio/mpeg">
       </audio>
     </div>
   `).join("");
